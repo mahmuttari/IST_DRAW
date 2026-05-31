@@ -1,0 +1,8 @@
+# Test/araç bağımlılıkları (uygulama saf tarayıcıda çalışır, bağımlılık gerektirmez)
+node_modules/
+package-lock.json
+package.json
+
+# Geçici / sistem
+*.log
+.DS_Store
