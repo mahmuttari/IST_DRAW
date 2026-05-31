@@ -77,14 +77,20 @@ const DXF = (function () {
       rebar.bars.forEach((b) => {
         if (b.kind === 'dot') {
           circle(b.x, b.y, (b.r || 0.006) * S, 'DONATI');
+        } else if (b.kind === 'ciroz') {
+          line(b.x1, b.y, b.x2, b.y, 'DONATI');
+        } else if (b.kind === 'barbakan') {
+          circle(b.x, b.y, 0.05 * S, 'DOLGU');
+          if (b.label) txt(b.x + 0.12, b.y, th * 0.7, b.label, 'YAZI');
         } else if (b.kind === 'lapdim') {
           line(b.a.x - 0.18, b.a.y, b.a.x - 0.18, b.b.y, 'OLCU');
           if (b.label) txt(b.a.x - 0.30, (b.a.y + b.b.y) / 2, th * 0.8, b.label, 'YAZI');
         } else if (b.poly) {
           polyLines(b.poly, 'DONATI', false);
-          if (b.label && b.labelPos) txt(b.labelPos.x, b.labelPos.y, th * 0.8, b.label, 'YAZI');
+          if (b.label && b.labelPos) txt(b.labelPos.x, b.labelPos.y, th * 0.8,
+            (b.poz ? b.poz + ' ' : '') + b.label, 'YAZI');
         } else if (b.kind === 'note' && b.label) {
-          txt(b.labelPos.x, b.labelPos.y, th * 0.8, b.label, 'YAZI');
+          txt(b.labelPos.x, b.labelPos.y, th * 0.8, (b.poz ? b.poz + ' ' : '') + b.label, 'YAZI');
         }
       });
     }
@@ -118,26 +124,29 @@ const DXF = (function () {
     txt(0, d.H + 0.6, th * 1.4, title, 'YAZI');
     txt(0, d.H + 0.3, th, 'Olculer mm. Olcek 1:1 (model birimi=mm).', 'YAZI');
 
-    // --- DONATI AÇILIM CETVELİ (kesitin sağında) ---
+    // --- DONATI AÇILIM (POZ) CETVELİ (kesitin sağında) ---
     if (quant && quant.schedule && quant.schedule.length) {
       const x0 = geo.B + 1.6;            // başlangıç x (m)
-      const colW = 6.0;                  // her şekil için max genişlik (m, şematik)
-      const rowH = 1.1;                  // satır yüksekliği (m)
-      let y = d.H;                       // tepeden aşağı
-      txt(x0, y + 0.45, th * 1.2, 'DONATI ACILIM CETVELI', 'YAZI');
+      const colW = 6.0;                  // şekil için max genişlik (m, şematik)
+      const rowH = 1.2;                  // satır yüksekliği (m)
+      let y = d.H;
+      txt(x0, y + 0.5, th * 1.2, 'DONATI ACILIM (POZ) CETVELI', 'YAZI');
       quant.schedule.forEach((r) => {
-        // özet etiket
-        txt(x0, y + 0.22, th * 0.8,
-          `${r.poz} ${r.count}xD${r.dia}/${r.spacing} L=${(r.pieceLen * 100).toFixed(0)}cm`, 'YAZI');
-        // şekli şematik ölçekle çiz
-        drawShapeDXF(r.shape, x0, y - rowH * 0.45, colW, rowH * 0.5);
+        circle(x0 - 0.25, y + 0.27, 0.13 * S, 'YAZI');
+        txt(x0 - 0.32, y + 0.20, th * 0.7, String(r.poz), 'YAZI');
+        txt(x0, y + 0.25, th * 0.8, (r.callout || `${r.count}D${r.dia} L=${Math.round(r.pieceLen * 100)}`), 'YAZI');
+        drawShapeDXF(r.shape, x0, y - rowH * 0.5, colW, rowH * 0.45);
         y -= rowH;
       });
+      if (quant.notes) {
+        txt(x0, y + 0.1, th * 0.75, quant.notes.barbakan, 'YAZI');
+        txt(x0, y - 0.2, th * 0.75, quant.notes.ciroz, 'YAZI');
+      }
     }
 
     return assemble(e);
 
-    // Büküm şeklini şematik olarak (kutuya ölçekli) DONATI katmanına çizer
+    // Büküm şeklini (cm bacaklar) DONATI katmanına gerçek geometriyle çizer
     function drawShapeDXF(shape, bx, by, bw, bh) {
       if (!shape || !shape.segs || !shape.segs.length) return;
       let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
@@ -151,8 +160,9 @@ const DXF = (function () {
       const PY = (yy) => by + (yy - miny) * sc;
       shape.segs.forEach((s) => {
         line(PX(s.x1), PY(s.y1), PX(s.x2), PY(s.y2), 'DONATI');
+        if (s.len < 1) return;
         const mx = (PX(s.x1) + PX(s.x2)) / 2, my = (PY(s.y1) + PY(s.y2)) / 2;
-        txt(mx, my + 0.05, th * 0.6, (s.len * 100).toFixed(0), 'OLCU');
+        txt(mx, my + 0.05, th * 0.55, s.len.toFixed(0), 'OLCU');
       });
     }
   }

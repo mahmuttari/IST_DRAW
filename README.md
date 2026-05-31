@@ -24,9 +24,14 @@ tamamen tarayıcıda çalışan (kurulum gerektirmeyen) bir uygulama.
 - **Metraj + donatı kesim listesi:** beton (m³), kalıp (m²), donatı ağırlığı (kg).
   - Standart **12 m stok** çubuktan kesim planı, **zayiat (fire)** oranı ve
     sipariş edilecek 12 m çubuk adedi; net/fireli ağırlık ve donatı oranı (kg/m³).
-- **Donatı açılım cetveli:** her pozun büküm şekli (düz / L / U), bacak ölçüleri
-  (cm) ve özet (poz no, adet, Øçap/aralık, boy, ağırlık, fire). Poz numaraları
-  kesit üzerindeki donatılarla eşleşir; yatay donatılar kesitte daire ile gösterilir.
+- **Donatı açılım (poz) cetveli:** TS uygulama paftası biçiminde 12 poz + çiroz.
+  Gösterim `adetØçap/aralık L=boy` (cm), gerçek **90° kancalı** büküm şekilleri
+  ve bacak ölçüleri. Poz numaraları (daire balon) kesitle birebir eşleşir.
+- **Poz şeması:** 1-2 taban enine (U), 3-4 perde ön düşey + filiz, 5-6 perde arka
+  düşey (ana çekme) + filiz, 7-8 perde ön/arka yatay, 9-12 taban boyuna donatılar,
+  Ç çiroz. **Çiroz** (yatay/düşey aralık) ve **barbakan** (Ø/aralık) girdileri ve notları.
+- Kesitte: ön/arka düşey donatı ayrımı, **yatay donatılar daire** olarak (donatı
+  kesiti), çiroz bağ çizgileri ve barbakan simgesi gösterilir.
 - **DXF dışa aktarım:** kesit + donatı + kotalar, katmanlı (BETON, DONATI, ZEMIN,
   DOLGU, OLCU, YAZI) AutoCAD R12 DXF olarak. Tüm CAD programlarında açılır.
 - Yatay/eğimli dolgu (β), sürşarj yükü (q) ve ayrı taban sürtünme açısı desteği.

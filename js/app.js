@@ -50,6 +50,8 @@
       diaStem: num('diaStem'), diaFoot: num('diaFoot'), diaDist: num('diaDist'),
       lapFactor: num('lapFactor'), stockLength: num('stockLength'),
       wallLength: num('wallLength'),
+      diaCiroz: num('diaCiroz'), cirozH: num('cirozH'), cirozV: num('cirozV'),
+      barbakanDia: num('barbakanDia'), barbakanS: num('barbakanS'),
       showRebar: $('showRebar').checked,
     };
   }
@@ -116,7 +118,7 @@
     });
     $('drawing').innerHTML = lastSVG;
     $('schedule').innerHTML = Draw.renderSchedule(
-      rebar ? quant.schedule : [], { stock: mat.stockLength });
+      rebar ? quant.schedule : [], { stock: mat.stockLength, notes: quant.notes });
 
     renderResults(res, geo, rebar, quant);
   }

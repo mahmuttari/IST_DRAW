@@ -148,16 +148,28 @@ const Draw = (function () {
     out.push(`<text x="${sx - 4}" y="${(a + b) / 2}" font-size="10" fill="#222" text-anchor="middle" transform="rotate(-90 ${sx - 4} ${(a + b) / 2})">${label}</text>`);
   }
 
-  // Donatıyı çizer: çizgiler (düşey/enine), filiz, yatay donatı noktaları,
-  // bindirme kotası ve etiketler.
-  const REBAR = '#d6336c', FILIZ = '#7048e8';
+  // Donatıyı çizer: çubuklar, filiz, yatay donatı daireleri, çiroz, barbakan,
+  // bindirme kotası, poz balonları ve etiketler.
+  const REBAR = '#d6336c', FILIZ = '#7048e8', CIROZ = '#e8590c', BARB = '#1098ad';
+
+  // Poz numarası balonu (daire içinde no)
+  function pozBalloon(out, px, py, poz) {
+    out.push(`<circle cx="${px}" cy="${py}" r="8.5" fill="#fff" stroke="#8e44ad" stroke-width="1.2"/>`);
+    out.push(text(px, py + 3.2, poz, { size: 9, weight: 'bold', fill: '#8e44ad', anchor: 'middle' }));
+  }
 
   function drawRebar(out, rebar, X, Y) {
-    // 1) Çubuklar / noktalar
+    // 1) Çubuklar / daireler / çiroz / barbakan
     rebar.bars.forEach((b) => {
       if (b.kind === 'dot') {
-        out.push(`<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="3.1" ` +
+        out.push(`<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="3.0" ` +
           `fill="${REBAR}" stroke="#7a1538" stroke-width="0.8"/>`);
+      } else if (b.kind === 'ciroz') {
+        out.push(`<line x1="${X(b.x1)}" y1="${Y(b.y)}" x2="${X(b.x2)}" y2="${Y(b.y)}" ` +
+          `stroke="${CIROZ}" stroke-width="1" stroke-dasharray="1,2.5"/>`);
+      } else if (b.kind === 'barbakan') {
+        out.push(`<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="4.2" fill="none" stroke="${BARB}" stroke-width="1.3"/>`);
+        out.push(`<line x1="${X(b.x) - 6}" y1="${Y(b.y)}" x2="${X(b.x) + 6}" y2="${Y(b.y)}" stroke="${BARB}" stroke-width="0.7"/>`);
       } else if (b.kind === 'lapdim') {
         const sx = X(b.a.x) - 14;
         out.push(`<line x1="${sx}" y1="${Y(b.a.y)}" x2="${sx}" y2="${Y(b.b.y)}" ` +
@@ -165,25 +177,31 @@ const Draw = (function () {
       } else if (b.poly) {
         const pts = b.poly.map((p) => `${X(p.x)},${Y(p.y)}`).join(' ');
         const col = b.kind === 'filiz' ? FILIZ : REBAR;
-        const w = b.kind === 'sec' ? 1.1 : 2.0;
+        const w = b.kind === 'sec' ? 1.2 : 2.0;
         const dash = b.kind === 'filiz' ? ' stroke-dasharray="6,3"' : '';
         out.push(`<polyline points="${pts}" fill="none" stroke="${col}" ` +
           `stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"${dash}/>`);
       }
     });
-    // 2) Etiketler (en üstte)
+    // 2) Etiketler + poz balonları
     rebar.bars.forEach((b) => {
       if (b.kind === 'lapdim' && b.label) {
         const sx = X(b.a.x) - 14, my = (Y(b.a.y) + Y(b.b.y)) / 2;
         out.push(`<text x="${sx - 3}" y="${my}" font-size="9" fill="${FILIZ}" ` +
           `text-anchor="middle" transform="rotate(-90 ${sx - 3} ${my})">${b.label}</text>`);
+      } else if (b.kind === 'barbakan' && b.label) {
+        out.push(text(X(b.x) + 9, Y(b.y) + 3, b.label, { size: 8.5, anchor: 'start', fill: BARB, weight: 'bold' }));
       } else if (b.label && b.labelPos) {
-        const col = b.kind === 'filiz' ? FILIZ : (b.kind === 'note' ? '#b08900' : REBAR);
-        out.push(`<rect x="${X(b.labelPos.x) - 2}" y="${Y(b.labelPos.y) - 9}" ` +
-          `width="${b.label.length * 5.9 + 6}" height="13" rx="2" fill="#fff" ` +
-          `fill-opacity="0.82" stroke="${col}" stroke-width="0.5"/>`);
-        out.push(text(X(b.labelPos.x) + 2, Y(b.labelPos.y), b.label,
-          { size: 9.5, anchor: 'start', fill: col, weight: 'bold' }));
+        const col = b.kind === 'filiz' ? FILIZ : (b.kind === 'note' ? '#b08900' : (b.kind === 'ciroz' ? CIROZ : REBAR));
+        const anchor = b.side === 'left' ? 'end' : 'start';
+        const lx = X(b.labelPos.x), ly = Y(b.labelPos.y);
+        const tx = b.side === 'left' ? lx - 13 : lx + 13;
+        // poz balonu
+        if (b.poz) pozBalloon(out, b.side === 'left' ? lx - 4 : lx + 4, ly - 3, b.poz);
+        const w = b.label.length * 5.9 + 6;
+        out.push(`<rect x="${b.side === 'left' ? tx - w : tx - 2}" y="${ly - 9}" ` +
+          `width="${w}" height="13" rx="2" fill="#fff" fill-opacity="0.82" stroke="${col}" stroke-width="0.5"/>`);
+        out.push(text(tx, ly, b.label, { size: 9, anchor, fill: col, weight: 'bold' }));
       }
     });
   }
@@ -211,19 +229,22 @@ const Draw = (function () {
   }
 
   /* =====================================================================
-   * DONATI AÇILIM CETVELİ — her pozun büküm şekli + bacak ölçüleri + özet
+   * DONATI AÇILIM CETVELİ — poz balonu, gerçek kancalı şekil, açılım yazısı
+   * (referans paftalardaki "adetØçap/aralık L=boy" formatı)
    * ===================================================================== */
   function renderSchedule(schedule, opts) {
     opts = opts || {};
     schedule = schedule || [];
-    const W = 720, rowH = 92, top = 64, pad = 16;
+    const notes = opts.notes;
+    const W = 720, rowH = 84, top = 64, pad = 16;
     const stock = opts.stock || 12;
-    const H = top + Math.max(1, schedule.length) * rowH + 20;
+    const noteH = notes ? 56 : 0;
+    const H = top + Math.max(1, schedule.length) * rowH + 20 + noteH;
     const out = [];
     out.push(`<svg xmlns="${NS}" viewBox="0 0 ${W} ${H}" class="wall-svg" font-family="Arial, sans-serif">`);
     out.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`);
-    out.push(text(W / 2, 28, 'DONATI AÇILIM CETVELİ', { size: 15, weight: 'bold', anchor: 'middle' }));
-    out.push(text(W / 2, 46, 'Şekiller şematiktir · bacak ölçüleri cm · poz no’ları kesitle eşleşir',
+    out.push(text(W / 2, 28, 'DONATI AÇILIM (POZ) CETVELİ', { size: 15, weight: 'bold', anchor: 'middle' }));
+    out.push(text(W / 2, 46, 'Format: adetØçap/aralık L=boy (cm) · kancalar 90° · poz no’ları kesitle eşleşir',
       { size: 10, fill: '#666', anchor: 'middle' }));
     out.push(`<line x1="${pad}" y1="${top - 6}" x2="${W - pad}" y2="${top - 6}" stroke="#bbb" stroke-width="1"/>`);
 
@@ -236,26 +257,35 @@ const Draw = (function () {
 
     schedule.forEach((r, i) => {
       const y0 = top + i * rowH;
-      out.push(`<line x1="${pad}" y1="${y0 + rowH - 8}" x2="${W - pad}" y2="${y0 + rowH - 8}" stroke="#eee" stroke-width="1"/>`);
-      // poz dairesi
-      out.push(`<circle cx="${pad + 15}" cy="${y0 + 24}" r="13" fill="#1f2a44"/>`);
-      out.push(text(pad + 15, y0 + 28, r.poz, { size: 11, weight: 'bold', fill: '#fff', anchor: 'middle' }));
-      // metin sütunu
+      out.push(`<line x1="${pad}" y1="${y0 + rowH - 6}" x2="${W - pad}" y2="${y0 + rowH - 6}" stroke="#eee" stroke-width="1"/>`);
+      // poz balonu
+      out.push(`<circle cx="${pad + 15}" cy="${y0 + 22}" r="13" fill="#fff" stroke="#8e44ad" stroke-width="1.6"/>`);
+      out.push(text(pad + 15, y0 + 26, r.poz, { size: 11, weight: 'bold', fill: '#8e44ad', anchor: 'middle' }));
+      // açılım (callout) — referans formatı
       const tx = pad + 38;
-      out.push(text(tx, y0 + 16, r.label, { size: 12, weight: 'bold', anchor: 'start' }));
-      out.push(text(tx, y0 + 33, `${r.count} adet  ${r.detail}`, { size: 11, anchor: 'start', fill: '#444' }));
-      out.push(text(tx, y0 + 49, `L = ${fmt(r.pieceLen)} m`, { size: 10.5, anchor: 'start', fill: '#666' }));
-      out.push(text(tx, y0 + 65, `${fmt(r.mass)} kg · ${r.stockBars}×${stock}m · fire %${Math.round(r.wastePct)}`,
-        { size: 10.5, anchor: 'start', fill: '#666' }));
-      // büküm şekli
-      drawShape(out, r.shape, { x: 300, y: y0 + 8, w: W - pad - 300, h: rowH - 24 });
+      const faceTxt = r.face ? `${r.face} · ` : '';
+      out.push(text(tx, y0 + 18, r.callout || `${r.count}Ø${r.dia}/${Math.round(r.spacing / 10)} L=${Math.round(r.pieceLen * 100)}`,
+        { size: 12.5, weight: 'bold', anchor: 'start', fill: '#1f2a44' }));
+      out.push(text(tx, y0 + 35, `${faceTxt}${r.label}`, { size: 10.5, anchor: 'start', fill: '#555' }));
+      out.push(text(tx, y0 + 51, `${fmt(r.mass)} kg · ${r.stockBars}×${stock}m · fire %${Math.round(r.wastePct)}`,
+        { size: 10, anchor: 'start', fill: '#888' }));
+      // gerçek kancalı büküm şekli
+      drawShape(out, r.shape, { x: 318, y: y0 + 6, w: W - pad - 318, h: rowH - 18 });
     });
+
+    // Notlar (çiroz, barbakan)
+    if (notes) {
+      const ny = top + schedule.length * rowH + 16;
+      out.push(`<line x1="${pad}" y1="${ny - 6}" x2="${W - pad}" y2="${ny - 6}" stroke="#bbb" stroke-width="1"/>`);
+      out.push(text(pad, ny + 10, '⊕ ' + notes.barbakan, { size: 10.5, anchor: 'start', fill: '#1098ad', weight: 'bold' }));
+      out.push(text(pad, ny + 28, '✚ ' + notes.ciroz, { size: 10.5, anchor: 'start', fill: '#e8590c', weight: 'bold' }));
+    }
 
     out.push('</svg>');
     return out.join('\n');
   }
 
-  // Büküm şeklini (segmentler) kutuya ölçekleyerek çizer; bacak boyları cm.
+  // Büküm şeklini (cm bacaklar) gerçek geometriyle, bacak ölçüleriyle çizer.
   function drawShape(out, shape, box) {
     if (!shape || !shape.segs || !shape.segs.length) return;
     let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
@@ -266,18 +296,23 @@ const Draw = (function () {
       });
     });
     const bw = Math.max(1e-3, maxx - minx), bh = Math.max(1e-3, maxy - miny);
-    const padS = 24;
+    const padS = 26;
     const sc = Math.min((box.w - 2 * padS) / bw, (box.h - 2 * padS) / bh);
     const ox = box.x + (box.w - bw * sc) / 2 - minx * sc;
-    const oy = box.y + (box.h + bh * sc) / 2 + miny * sc;   // y-aşağı dönüşümü
+    const oy = box.y + (box.h + bh * sc) / 2 + miny * sc;   // y-aşağı
     const PX = (x) => ox + x * sc, PY = (y) => oy - y * sc;
+    // her segment ayrı çizilir (U/L köşeleri gerçek geometriyle korunur)
     shape.segs.forEach((s) => {
       out.push(`<line x1="${PX(s.x1)}" y1="${PY(s.y1)}" x2="${PX(s.x2)}" y2="${PY(s.y2)}" ` +
-        `stroke="${REBAR}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`);
+        `stroke="${REBAR}" stroke-width="2.6" stroke-linecap="round"/>`);
+    });
+    // bacak ölçüleri (yalnız anlamlı uzunluktakiler)
+    shape.segs.forEach((s) => {
+      if (s.len < 1) return;
       const mx = (PX(s.x1) + PX(s.x2)) / 2, my = (PY(s.y1) + PY(s.y2)) / 2;
       const horiz = Math.abs(s.y1 - s.y2) < Math.abs(s.x1 - s.x2);
-      out.push(text(horiz ? mx : mx - 11, horiz ? my + 13 : my + 3, Math.round(s.len * 100),
-        { size: 9.5, anchor: 'middle', fill: '#333' }));
+      out.push(text(horiz ? mx : mx - 10, horiz ? my + 12 : my + 3, Math.round(s.len),
+        { size: 9, anchor: 'middle', fill: '#333' }));
     });
   }
 
