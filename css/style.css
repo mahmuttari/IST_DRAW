@@ -142,6 +142,15 @@ body {
 .drawing { width: 100%; }
 .wall-svg { width: 100%; height: auto; background: #fff; }
 
+.schedule-panel { margin: 0 14px 14px; overflow-x: auto; }
+.schedule-panel .wall-svg { max-width: 760px; }
+
+.schedule-panel {
+  margin: 0 14px 14px;
+  overflow-x: auto;
+}
+.schedule-panel .wall-svg { max-width: 760px; }
+
 .results h3 {
   font-size: 13px;
   margin: 16px 0 6px;

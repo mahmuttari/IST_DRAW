@@ -108,13 +108,15 @@
       ? Rebar.designCantilever(geo, model, res, mat) : null;
     const quant = Rebar.quantities(geo, rebar, mat, mat.wallLength);
 
-    last.geo = geo; last.rebar = rebar; last.mat = mat;
+    last.geo = geo; last.rebar = rebar; last.mat = mat; last.quant = quant;
 
     lastSVG = Draw.render(geo, {
       showPressure: true,
       rebar: (mat.showRebar && rebar) ? rebar : null,
     });
     $('drawing').innerHTML = lastSVG;
+    $('schedule').innerHTML = Draw.renderSchedule(
+      rebar ? quant.schedule : [], { stock: mat.stockLength });
 
     renderResults(res, geo, rebar, quant);
   }
@@ -319,7 +321,7 @@
   function downloadDXF() {
     if (!last.geo) run();
     if (!last.geo) return;
-    const dxf = DXF.build(last.geo, last.rebar, {});
+    const dxf = DXF.build(last.geo, last.rebar, last.quant, {});
     downloadBlob(dxf, `istinat_duvari_${app.type}.dxf`, 'application/dxf');
   }
 

@@ -26,7 +26,7 @@ const DXF = (function () {
     ['YAZI', 3],    // yeşil
   ];
 
-  function build(geo, rebar, opts) {
+  function build(geo, rebar, quant, opts) {
     opts = opts || {};
     const e = [];                       // ENTITIES grup kodları
     const th = opts.textHeight || 120;  // mm
@@ -118,7 +118,43 @@ const DXF = (function () {
     txt(0, d.H + 0.6, th * 1.4, title, 'YAZI');
     txt(0, d.H + 0.3, th, 'Olculer mm. Olcek 1:1 (model birimi=mm).', 'YAZI');
 
+    // --- DONATI AÇILIM CETVELİ (kesitin sağında) ---
+    if (quant && quant.schedule && quant.schedule.length) {
+      const x0 = geo.B + 1.6;            // başlangıç x (m)
+      const colW = 6.0;                  // her şekil için max genişlik (m, şematik)
+      const rowH = 1.1;                  // satır yüksekliği (m)
+      let y = d.H;                       // tepeden aşağı
+      txt(x0, y + 0.45, th * 1.2, 'DONATI ACILIM CETVELI', 'YAZI');
+      quant.schedule.forEach((r) => {
+        // özet etiket
+        txt(x0, y + 0.22, th * 0.8,
+          `${r.poz} ${r.count}xD${r.dia}/${r.spacing} L=${(r.pieceLen * 100).toFixed(0)}cm`, 'YAZI');
+        // şekli şematik ölçekle çiz
+        drawShapeDXF(r.shape, x0, y - rowH * 0.45, colW, rowH * 0.5);
+        y -= rowH;
+      });
+    }
+
     return assemble(e);
+
+    // Büküm şeklini şematik olarak (kutuya ölçekli) DONATI katmanına çizer
+    function drawShapeDXF(shape, bx, by, bw, bh) {
+      if (!shape || !shape.segs || !shape.segs.length) return;
+      let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+      shape.segs.forEach((s) => [[s.x1, s.y1], [s.x2, s.y2]].forEach(([x, yy]) => {
+        minx = Math.min(minx, x); maxx = Math.max(maxx, x);
+        miny = Math.min(miny, yy); maxy = Math.max(maxy, yy);
+      }));
+      const w = Math.max(1e-3, maxx - minx), h = Math.max(1e-3, maxy - miny);
+      const sc = Math.min(bw / w, bh / h);
+      const PX = (x) => bx + (x - minx) * sc;
+      const PY = (yy) => by + (yy - miny) * sc;
+      shape.segs.forEach((s) => {
+        line(PX(s.x1), PY(s.y1), PX(s.x2), PY(s.y2), 'DONATI');
+        const mx = (PX(s.x1) + PX(s.x2)) / 2, my = (PY(s.y1) + PY(s.y2)) / 2;
+        txt(mx, my + 0.05, th * 0.6, (s.len * 100).toFixed(0), 'OLCU');
+      });
+    }
   }
 
   function fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }

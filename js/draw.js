@@ -156,9 +156,8 @@ const Draw = (function () {
     // 1) Çubuklar / noktalar
     rebar.bars.forEach((b) => {
       if (b.kind === 'dot') {
-        const r = Math.max(2.2, (b.r || 0.006) * 1000 * 0 + 2.6);
-        out.push(`<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="${r}" ` +
-          `fill="${REBAR}" stroke="#fff" stroke-width="0.5"/>`);
+        out.push(`<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="3.1" ` +
+          `fill="${REBAR}" stroke="#7a1538" stroke-width="0.8"/>`);
       } else if (b.kind === 'lapdim') {
         const sx = X(b.a.x) - 14;
         out.push(`<line x1="${sx}" y1="${Y(b.a.y)}" x2="${sx}" y2="${Y(b.b.y)}" ` +
@@ -211,7 +210,78 @@ const Draw = (function () {
     }
   }
 
-  return { render };
+  /* =====================================================================
+   * DONATI AÇILIM CETVELİ — her pozun büküm şekli + bacak ölçüleri + özet
+   * ===================================================================== */
+  function renderSchedule(schedule, opts) {
+    opts = opts || {};
+    schedule = schedule || [];
+    const W = 720, rowH = 92, top = 64, pad = 16;
+    const stock = opts.stock || 12;
+    const H = top + Math.max(1, schedule.length) * rowH + 20;
+    const out = [];
+    out.push(`<svg xmlns="${NS}" viewBox="0 0 ${W} ${H}" class="wall-svg" font-family="Arial, sans-serif">`);
+    out.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`);
+    out.push(text(W / 2, 28, 'DONATI AÇILIM CETVELİ', { size: 15, weight: 'bold', anchor: 'middle' }));
+    out.push(text(W / 2, 46, 'Şekiller şematiktir · bacak ölçüleri cm · poz no’ları kesitle eşleşir',
+      { size: 10, fill: '#666', anchor: 'middle' }));
+    out.push(`<line x1="${pad}" y1="${top - 6}" x2="${W - pad}" y2="${top - 6}" stroke="#bbb" stroke-width="1"/>`);
+
+    if (!schedule.length) {
+      out.push(text(W / 2, top + 34, 'Donatı açılımı yalnızca konsol (betonarme) tip içindir.',
+        { size: 12, fill: '#888', anchor: 'middle' }));
+      out.push('</svg>');
+      return out.join('\n');
+    }
+
+    schedule.forEach((r, i) => {
+      const y0 = top + i * rowH;
+      out.push(`<line x1="${pad}" y1="${y0 + rowH - 8}" x2="${W - pad}" y2="${y0 + rowH - 8}" stroke="#eee" stroke-width="1"/>`);
+      // poz dairesi
+      out.push(`<circle cx="${pad + 15}" cy="${y0 + 24}" r="13" fill="#1f2a44"/>`);
+      out.push(text(pad + 15, y0 + 28, r.poz, { size: 11, weight: 'bold', fill: '#fff', anchor: 'middle' }));
+      // metin sütunu
+      const tx = pad + 38;
+      out.push(text(tx, y0 + 16, r.label, { size: 12, weight: 'bold', anchor: 'start' }));
+      out.push(text(tx, y0 + 33, `${r.count} adet  ${r.detail}`, { size: 11, anchor: 'start', fill: '#444' }));
+      out.push(text(tx, y0 + 49, `L = ${fmt(r.pieceLen)} m`, { size: 10.5, anchor: 'start', fill: '#666' }));
+      out.push(text(tx, y0 + 65, `${fmt(r.mass)} kg · ${r.stockBars}×${stock}m · fire %${Math.round(r.wastePct)}`,
+        { size: 10.5, anchor: 'start', fill: '#666' }));
+      // büküm şekli
+      drawShape(out, r.shape, { x: 300, y: y0 + 8, w: W - pad - 300, h: rowH - 24 });
+    });
+
+    out.push('</svg>');
+    return out.join('\n');
+  }
+
+  // Büküm şeklini (segmentler) kutuya ölçekleyerek çizer; bacak boyları cm.
+  function drawShape(out, shape, box) {
+    if (!shape || !shape.segs || !shape.segs.length) return;
+    let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+    shape.segs.forEach((s) => {
+      [[s.x1, s.y1], [s.x2, s.y2]].forEach(([x, y]) => {
+        minx = Math.min(minx, x); maxx = Math.max(maxx, x);
+        miny = Math.min(miny, y); maxy = Math.max(maxy, y);
+      });
+    });
+    const bw = Math.max(1e-3, maxx - minx), bh = Math.max(1e-3, maxy - miny);
+    const padS = 24;
+    const sc = Math.min((box.w - 2 * padS) / bw, (box.h - 2 * padS) / bh);
+    const ox = box.x + (box.w - bw * sc) / 2 - minx * sc;
+    const oy = box.y + (box.h + bh * sc) / 2 + miny * sc;   // y-aşağı dönüşümü
+    const PX = (x) => ox + x * sc, PY = (y) => oy - y * sc;
+    shape.segs.forEach((s) => {
+      out.push(`<line x1="${PX(s.x1)}" y1="${PY(s.y1)}" x2="${PX(s.x2)}" y2="${PY(s.y2)}" ` +
+        `stroke="${REBAR}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`);
+      const mx = (PX(s.x1) + PX(s.x2)) / 2, my = (PY(s.y1) + PY(s.y2)) / 2;
+      const horiz = Math.abs(s.y1 - s.y2) < Math.abs(s.x1 - s.x2);
+      out.push(text(horiz ? mx : mx - 11, horiz ? my + 13 : my + 3, Math.round(s.len * 100),
+        { size: 9.5, anchor: 'middle', fill: '#333' }));
+    });
+  }
+
+  return { render, renderSchedule };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {

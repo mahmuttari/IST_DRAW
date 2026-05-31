@@ -187,7 +187,7 @@ const Rebar = (function () {
     const yFilizTop = tf + l0s;
     bars.push({
       layer: 'DONATI', kind: 'filiz',
-      label: `Filiz Ø${stem.dia}/${stem.spacing}`,
+      label: `P1 Filiz Ø${stem.dia}/${stem.spacing}`,
       poly: [
         { x: xb - c - bendS, y: c },                  // temel içi yatay kanca
         { x: xb - c - 0.035, y: c },                  // (devam donatısından hafif ayrık)
@@ -198,7 +198,7 @@ const Rebar = (function () {
     // (b) GÖVDE DÜŞEY (devam) — temel üstünden gövde tepesine
     bars.push({
       layer: 'DONATI', kind: 'main',
-      label: `Ø${stem.dia}/${stem.spacing}`,
+      label: `P2 Ø${stem.dia}/${stem.spacing}`,
       poly: [
         { x: xb - c, y: tf },
         { x: d.xStemBackTop - c, y: H - c },
@@ -219,7 +219,7 @@ const Rebar = (function () {
     // (d) TABAN ALT (ön ökçe → boydan boya, uçları yukarı kancalı)
     bars.push({
       layer: 'DONATI', kind: 'main',
-      label: `Ø${toe.dia}/${toe.spacing}`,
+      label: `P4 Ø${toe.dia}/${toe.spacing}`,
       poly: [
         { x: c, y: c + bendF }, { x: c, y: c },
         { x: B - c, y: c }, { x: B - c, y: c + bendF },
@@ -229,7 +229,7 @@ const Rebar = (function () {
     // (e) TABAN ÜST (arka topuk, uçları aşağı kancalı)
     bars.push({
       layer: 'DONATI', kind: 'main',
-      label: `Ø${heel.dia}/${heel.spacing}`,
+      label: `P5 Ø${heel.dia}/${heel.spacing}`,
       poly: [
         { x: c, y: tf - c - bendF }, { x: c, y: tf - c },
         { x: B - c, y: tf - c }, { x: B - c, y: tf - c - bendF },
@@ -247,7 +247,7 @@ const Rebar = (function () {
       bars.push({ layer: 'DONATI', kind: 'dot', r: rDist, x: Lt + c, y: yy });
     }
     bars.push({ layer: 'YAZI', kind: 'note',
-      label: `Yatay Ø${dist.dia}/${dist.spacing}`,
+      label: `P6 Yatay Ø${dist.dia}/${dist.spacing}`,
       labelPos: { x: Lt + c + 0.05, y: tf + Hs * 0.85 } });
 
     // (g) TABAN boyuna (yatay) donatı — alt ve üst sıra (nokta)
@@ -291,8 +291,32 @@ const Rebar = (function () {
     };
   }
 
+  /*
+   * Donatı büküm şekli (açılım) — yerel koordinatta (m) bacak parçaları.
+   * legs: [{n:'ad', v:uzunluk_m}, ...]
+   */
+  function makeShape(type, legs) {
+    const seg = (x1, y1, x2, y2, leg) => ({ x1, y1, x2, y2, len: leg.v, name: leg.n });
+    const v = (i) => legs[i].v;
+    const segs = [];
+    if (type === 'straight') {
+      segs.push(seg(0, 0, v(0), 0, legs[0]));
+    } else if (type === 'Lfiliz') {                 // dikey gövde + alt ayak (kanca)
+      segs.push(seg(0, 0, 0, v(1), legs[1]));
+      segs.push(seg(0, 0, v(0), 0, legs[0]));
+    } else if (type === 'U') {                       // iki ucu yukarı kancalı
+      segs.push(seg(0, v(0), 0, 0, legs[0]));
+      segs.push(seg(0, 0, v(1), 0, legs[1]));
+      segs.push(seg(v(1), 0, v(1), v(2), legs[2]));
+    } else if (type === 'Lheel') {                   // düz + uçta aşağı kanca
+      segs.push(seg(0, 0, v(0), 0, legs[0]));
+      segs.push(seg(v(0), 0, v(0), -v(1), legs[1]));
+    }
+    return { type, segs };
+  }
+
   /* =====================================================================
-   * METRAJ + DONATI KESİM LİSTESİ (12 m stok, zayiat)
+   * METRAJ + DONATI KESİM LİSTESİ (12 m stok, zayiat) + AÇILIM ŞEKİLLERİ
    * ===================================================================== */
   function quantities(geo, rebar, mat, wallLength) {
     const L = wallLength > 0 ? wallLength : 1;
@@ -322,40 +346,41 @@ const Rebar = (function () {
       const lapD = rebar.laps.dist.l0 / 1000;
       const bendS = Math.max(0.15, 12 * stem.dia / 1000);
       const bendF = Math.max(0.15, 12 * toe.dia / 1000);
-
-      // Enine (kesit düzlemindeki) çubuklar: adet = (1000/s)·L
       const nTrans = (s) => Math.ceil((1000 / s) * L);
-
-      // (1) FİLİZ — temel içi (tf−c + alt kanca) + gövdeye l0 uzantı
-      add('Filiz (düşey)', stem.dia, stem.spacing,
-        (d.tf - c) + bendS + lapS, nTrans(stem.spacing));
-      // (2) GÖVDE DÜŞEY (devam) — gövde boyu + üst paspayı
-      add('Gövde düşey (devam)', stem.dia, stem.spacing,
-        (d.H - d.tf) - c, nTrans(stem.spacing));
-      // (3) GÖVDE ÖN YÜZ nominal (Ø dağıtma, /250)
-      add('Gövde ön yüz', rebar.dist.dia, 250,
-        (d.H - d.tf) - c, nTrans(250));
-      // (4) TABAN ALT (enine) — boydan boya + 2 kanca
-      add('Taban alt (enine)', toe.dia, toe.spacing,
-        (geo.B - 2 * c) + 2 * bendF, nTrans(toe.spacing));
-      // (5) TABAN ÜST (enine) — topuk + gövde + kenetlenme
-      add('Taban üst (enine)', heel.dia, heel.spacing,
-        Math.min(geo.B - 2 * c, d.Lh + d.tBot + lapF) + bendF, nTrans(heel.spacing));
-      // (6) GÖVDE YATAY — duvar boyunca (her iki yüz), adet = katman×2
       const nStemH = Math.max(1, Math.round(d.Hs / (rebar.dist.spacing / 1000))) * 2;
-      addLong('Gövde yatay', rebar.dist.dia, rebar.dist.spacing, L, nStemH, lapD);
-      // (7) TABAN BOYUNA — duvar boyunca (alt+üst), adet = sıra×2
       const nFootL = Math.max(1, Math.round((geo.B - 2 * c) / 0.25)) * 2;
-      addLong('Taban boyuna', rebar.dist.dia, 250, L, nFootL, lapD);
 
-      function add(label, dia, spacing, pieceLen, count) {
-        const cp = cutPlan(pieceLen, count, dia, stock, 0);
-        schedule.push(Object.assign({ label, dia, spacing, detail: `Ø${dia}/${spacing}` }, cp));
-      }
-      function addLong(label, dia, spacing, pieceLen, count, lap) {
-        const cp = cutPlan(pieceLen, count, dia, stock, lap);
-        schedule.push(Object.assign({ label, dia, spacing, detail: `Ø${dia}/${spacing}` }, cp));
-      }
+      let poz = 0;
+      const addBar = (label, dia, spacing, count, type, legs, lap) => {
+        const pieceLen = legs.reduce((s, x) => s + x.v, 0);
+        const cp = cutPlan(pieceLen, count, dia, stock, lap || 0);
+        schedule.push(Object.assign({
+          poz: 'P' + (++poz), label, dia, spacing,
+          detail: `Ø${dia}/${spacing}`, shape: makeShape(type, legs),
+        }, cp));
+      };
+
+      // (P1) FİLİZ — alt kanca + (temel içi + gövdeye l0 uzantı)
+      addBar('Filiz (düşey)', stem.dia, stem.spacing, nTrans(stem.spacing),
+        'Lfiliz', [{ n: 'a', v: bendS }, { n: 'b', v: (d.tf - c) + lapS }]);
+      // (P2) GÖVDE DÜŞEY (devam)
+      addBar('Gövde düşey (devam)', stem.dia, stem.spacing, nTrans(stem.spacing),
+        'straight', [{ n: 'b', v: (d.H - d.tf) - c }]);
+      // (P3) GÖVDE ÖN YÜZ nominal
+      addBar('Gövde ön yüz', rebar.dist.dia, 250, nTrans(250),
+        'straight', [{ n: 'b', v: (d.H - d.tf) - c }]);
+      // (P4) TABAN ALT (enine) — U, iki uç kancalı
+      addBar('Taban alt (enine)', toe.dia, toe.spacing, nTrans(toe.spacing),
+        'U', [{ n: 'h', v: bendF }, { n: 'w', v: geo.B - 2 * c }, { n: 'h', v: bendF }]);
+      // (P5) TABAN ÜST (enine) — L, uçta aşağı kanca
+      addBar('Taban üst (enine)', heel.dia, heel.spacing, nTrans(heel.spacing),
+        'Lheel', [{ n: 'w', v: Math.min(geo.B - 2 * c, d.Lh + d.tBot + lapF) }, { n: 'h', v: bendF }]);
+      // (P6) GÖVDE YATAY — duvar boyunca (her iki yüz)
+      addBar('Gövde yatay', rebar.dist.dia, rebar.dist.spacing, nStemH,
+        'straight', [{ n: 'b', v: L }], lapD);
+      // (P7) TABAN BOYUNA — duvar boyunca (alt+üst)
+      addBar('Taban boyuna', rebar.dist.dia, 250, nFootL,
+        'straight', [{ n: 'b', v: L }], lapD);
     }
 
     const totMass = schedule.reduce((s, r) => s + r.mass, 0);        // satın alınan
