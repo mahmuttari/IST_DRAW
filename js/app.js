@@ -43,6 +43,16 @@
     });
   }
 
+  function readMaterial() {
+    return {
+      fck: num('fck'), fyk: num('fyk'), cover: num('cover'),
+      loadFactor: num('loadFactor'),
+      diaStem: num('diaStem'), diaFoot: num('diaFoot'), diaDist: num('diaDist'),
+      wallLength: num('wallLength'),
+      showRebar: $('showRebar').checked,
+    };
+  }
+
   function readGravity() {
     return Object.assign(readCommon(), {
       H: num('g_H'), a: num('g_a'), b: num('g_b'),
@@ -71,6 +81,7 @@
   }
 
   let lastSVG = '';
+  const last = { geo: null, rebar: null, mat: null };
 
   function run() {
     const type = app.type;
@@ -91,13 +102,85 @@
     const model = Geometry.toAnalysisModel(geo, d);
     const res = Eng.analyze(model);
 
-    lastSVG = Draw.render(geo, { showPressure: true });
+    const mat = readMaterial();
+    const rebar = type === 'cantilever'
+      ? Rebar.designCantilever(geo, model, res, mat) : null;
+    const quant = Rebar.quantities(geo, rebar, mat, mat.wallLength);
+
+    last.geo = geo; last.rebar = rebar; last.mat = mat;
+
+    lastSVG = Draw.render(geo, {
+      showPressure: true,
+      rebar: (mat.showRebar && rebar) ? rebar : null,
+    });
     $('drawing').innerHTML = lastSVG;
 
-    renderResults(res, geo);
+    renderResults(res, geo, rebar, quant);
   }
 
-  function renderResults(res, geo) {
+  function rebarSection(rebar, geo) {
+    if (geo.type !== 'cantilever' || !rebar) {
+      return `<h3>Donatı</h3>
+        <p class="note">Ağırlık duvarı donatısız (sade beton) olarak tasarlanır;
+        donatı hesabı yalnızca konsol (betonarme) tip için yapılır.</p>`;
+    }
+    const grp = (g) => `
+      <tr class="${g.warn ? 'r-fail' : ''}">
+        <td>${g.label}</td>
+        <td class="numv">${fmt(g.Mu, 1)}</td>
+        <td class="numv">${Math.round(g.AsReq)}</td>
+        <td class="numv"><strong>Ø${g.dia}/${g.spacing}</strong></td>
+        <td class="numv">${Math.round(g.AsProv)}${g.governedByMin ? ' *' : ''}</td>
+      </tr>`;
+    const warnHtml = rebar.warnings.length
+      ? `<div class="messages error" style="margin:8px 0">⚠ ${rebar.warnings.join('<br>')}</div>`
+      : '';
+    return `
+      <h3>Donatı (ön tasarım)</h3>
+      ${warnHtml}
+      <table class="res-table small">
+        <thead><tr><th>Konum</th><th>M_d (kNm/m)</th><th>As,ger (mm²/m)</th>
+          <th>Seçim</th><th>As,var (mm²/m)</th></tr></thead>
+        <tbody>
+          ${rebar.groups.map(grp).join('')}
+          <tr><td>${rebar.dist.label}</td><td class="numv">—</td>
+            <td class="numv">${Math.round(rebar.dist.AsReq)}</td>
+            <td class="numv"><strong>Ø${rebar.dist.dia}/${rebar.dist.spacing}</strong></td>
+            <td class="numv">${Math.round(rebar.dist.AsProv)}</td></tr>
+        </tbody>
+      </table>
+      <p class="note">* minimum donatı belirleyici. Yük katsayısı = ${fmt(rebar.moments.LF, 2)}.
+      Kenetlenme/bindirme boyları ve kesme donatısı dahil değildir.</p>`;
+  }
+
+  function quantitySection(quant) {
+    const q = quant;
+    return `
+      <h3>Metraj <small>(L = ${fmt(q.wallLength, 1)} m)</small></h3>
+      <table class="res-table small">
+        <thead><tr><th>Kalem</th><th>Birim/m</th><th>Toplam</th></tr></thead>
+        <tbody>
+          <tr><td>Beton hacmi</td><td class="numv">${fmt(q.perMeter.concrete, 3)} m³/m</td>
+            <td class="numv"><strong>${fmt(q.total.concrete, 2)} m³</strong></td></tr>
+          <tr><td>Kalıp alanı</td><td class="numv">${fmt(q.perMeter.formwork, 2)} m²/m</td>
+            <td class="numv"><strong>${fmt(q.total.formwork, 2)} m²</strong></td></tr>
+          <tr><td>Donatı ağırlığı</td><td class="numv">${fmt(q.perMeter.steel, 1)} kg/m</td>
+            <td class="numv"><strong>${fmt(q.total.steel, 1)} kg</strong></td></tr>
+          ${q.steelRatio ? `<tr><td>Donatı oranı</td><td class="numv">—</td>
+            <td class="numv">${fmt(q.steelRatio, 1)} kg/m³</td></tr>` : ''}
+        </tbody>
+      </table>
+      ${q.steelLines.length ? `
+      <table class="res-table small">
+        <thead><tr><th>Donatı pozisyonu</th><th>Seçim</th><th>kg/m</th></tr></thead>
+        <tbody>${q.steelLines.map((s) => `
+          <tr><td>${s.label}</td><td>${s.detail}</td>
+            <td class="numv">${fmt(s.kgPerM, 1)}</td></tr>`).join('')}
+        </tbody>
+      </table>` : ''}`;
+  }
+
+  function renderResults(res, geo, rebar, quant) {
     const c = res.checks;
     const badge = (ok) => ok
       ? '<span class="badge ok">UYGUN ✓</span>'
@@ -173,19 +256,33 @@
         <thead><tr><th>Bileşen</th><th>W (kN/m)</th><th>x̄ (m)</th><th>M (kNm/m)</th></tr></thead>
         <tbody>${comps}</tbody>
       </table>
+
+      ${rebarSection(rebar, geo)}
+      ${quantitySection(quant)}
     `;
   }
 
-  function downloadSVG() {
-    if (!lastSVG) { run(); }
-    if (!lastSVG) return;
-    const blob = new Blob([lastSVG], { type: 'image/svg+xml' });
+  function downloadBlob(content, filename, mime) {
+    const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `istinat_duvari_${app.type}.svg`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function downloadSVG() {
+    if (!lastSVG) run();
+    if (!lastSVG) return;
+    downloadBlob(lastSVG, `istinat_duvari_${app.type}.svg`, 'image/svg+xml');
+  }
+
+  function downloadDXF() {
+    if (!last.geo) run();
+    if (!last.geo) return;
+    const dxf = DXF.build(last.geo, last.rebar, {});
+    downloadBlob(dxf, `istinat_duvari_${app.type}.dxf`, 'application/dxf');
   }
 
   const app = { type: 'cantilever' };
@@ -194,6 +291,7 @@
     document.querySelectorAll('.type-btn').forEach((b) =>
       b.addEventListener('click', () => { setWallType(b.dataset.type); run(); }));
     $('btnCalc').addEventListener('click', run);
+    $('btnDXF').addEventListener('click', downloadDXF);
     $('btnDownload').addEventListener('click', downloadSVG);
     $('btnPrint').addEventListener('click', () => window.print());
     setWallType('cantilever');

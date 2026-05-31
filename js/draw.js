@@ -102,6 +102,11 @@ const Draw = (function () {
       out.push(text(xp + pmax + 6, (yTop + yBot) / 2, 'Pa', { fill: '#1f6feb', size: 12, weight: 'bold', anchor: 'start' }));
     }
 
+    // --- Donatı katmanı (varsa) ---
+    if (opts.rebar && opts.rebar.bars) {
+      drawRebar(out, opts.rebar, X, Y);
+    }
+
     // --- Ölçülendirme (kotalar) ---
     geo.dimLines = [];
     drawDims(out, geo, X, Y, scale);
@@ -141,6 +146,26 @@ const Draw = (function () {
     out.push(`<line x1="${X(xLvl)}" y1="${b}" x2="${sx - 4}" y2="${b}" stroke="#999" stroke-width="0.6"/>`);
     out.push(`<line x1="${sx}" y1="${a}" x2="${sx}" y2="${b}" stroke="#333" stroke-width="0.9" marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>`);
     out.push(`<text x="${sx - 4}" y="${(a + b) / 2}" font-size="10" fill="#222" text-anchor="middle" transform="rotate(-90 ${sx - 4} ${(a + b) / 2})">${label}</text>`);
+  }
+
+  // Donatıyı kırmızı çizgilerle (model uzayındaki poligonlar) çizer.
+  function drawRebar(out, rebar, X, Y) {
+    rebar.bars.forEach((b) => {
+      const pts = b.poly.map((p) => `${X(p.x)},${Y(p.y)}`).join(' ');
+      const w = b.kind === 'main' ? 2.0 : 1.1;
+      out.push(`<polyline points="${pts}" fill="none" stroke="#d6336c" ` +
+        `stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"/>`);
+    });
+    // Etiketler (en üste)
+    rebar.bars.forEach((b) => {
+      if (b.label && b.labelPos) {
+        out.push(`<rect x="${X(b.labelPos.x) - 2}" y="${Y(b.labelPos.y) - 9}" ` +
+          `width="${b.label.length * 6.2 + 6}" height="13" rx="2" fill="#fff" ` +
+          `fill-opacity="0.82" stroke="#d6336c" stroke-width="0.5"/>`);
+        out.push(text(X(b.labelPos.x) + 2, Y(b.labelPos.y), b.label,
+          { size: 10, anchor: 'start', fill: '#d6336c', weight: 'bold' }));
+      }
+    });
   }
 
   function drawDims(out, geo, X, Y, scale) {
