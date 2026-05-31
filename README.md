@@ -32,8 +32,14 @@ tamamen tarayıcıda çalışan (kurulum gerektirmeyen) bir uygulama.
   Ç çiroz. **Çiroz** (yatay/düşey aralık) ve **barbakan** (Ø/aralık) girdileri ve notları.
 - Kesitte: ön/arka düşey donatı ayrımı, **yatay donatılar daire** olarak (donatı
   kesiti), çiroz bağ çizgileri ve barbakan simgesi gösterilir.
-- **DXF dışa aktarım:** kesit + donatı + kotalar, katmanlı (BETON, DONATI, ZEMIN,
-  DOLGU, OLCU, YAZI) AutoCAD R12 DXF olarak. Tüm CAD programlarında açılır.
+- **Ayrı detay görünüşleri** (referans uygulama paftası düzeni):
+  - **Perde Donatı Detayı** (boy görünüş): yatay donatılar (7/8), düşey donatı
+    dağılımı, **barbakan ızgarası** (Ø/aralık) ve A-A kesit çizgisi.
+  - **Taban Plağı Donatı Detayı** (plan): boyuna donatılar (9-12, ön/topuk·alt/üst),
+    enine donatı dağılımı (1/2 açılım) ve gövde ayak izi.
+- **DXF dışa aktarım:** tek paftada **kesit + poz açılım cetveli + Perde Donatı
+  Detayı + Taban Plağı Donatı Detayı**, katmanlı (BETON, DONATI, ZEMIN, DOLGU,
+  OLCU, YAZI) AutoCAD R12 DXF olarak. Tüm CAD programlarında açılır.
 - Yatay/eğimli dolgu (β), sürşarj yükü (q) ve ayrı taban sürtünme açısı desteği.
 - SVG / DXF indirme ve yazdırma.
 
@@ -57,8 +63,9 @@ css/style.css         Stil
 js/engineering.js     Stabilite hesapları (Rankine itki, güvenlik kontrolleri)
 js/geometry.js        Ölçülerden kesit geometrisinin üretimi
 js/reinforcement.js   Donatı ön tasarımı + metraj (beton/kalıp/çelik)
-js/draw.js            Geometri + donatıdan ölçekli SVG teknik çizim
-js/dxf.js             Kesit + donatının DXF (AutoCAD) olarak dışa aktarımı
+js/draw.js            Geometri + donatıdan ölçekli SVG kesit ve poz cetveli
+js/details.js         Perde / Taban Plağı donatı detay görünüşleri (SVG primitive)
+js/dxf.js             Kesit + cetvel + detayların DXF (AutoCAD) olarak dışa aktarımı
 js/app.js             Arayüz mantığı (girdi → hesap → çizim/sonuç)
 ```
 

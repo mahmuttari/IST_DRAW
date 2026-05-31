@@ -144,7 +144,42 @@ const DXF = (function () {
       }
     }
 
+    // --- AYRI DETAY GÖRÜNÜŞLERİ (kesitin altında) ---
+    if (opts.details) {
+      const layerOf = { outline: 'BETON', stemfoot: 'BETON', rebar: 'DONATI',
+        rebar2: 'DONATI', rebarthin: 'DONATI', barbakan: 'DOLGU',
+        section: 'OLCU', dim: 'OLCU', dimtext: 'OLCU' };
+      let cursorY = -d.tf - 2.0;            // ilk detay kesitin altında başlar
+      [opts.details.elevation, opts.details.plan].forEach((det) => {
+        if (!det) return;
+        const b = det.bounds;
+        const oy = cursorY - (b.maxy - b.miny);     // detayı aşağı yerleştir
+        const ox = -b.minx;                          // sola hizala (x=0)
+        const PX = (x) => x + ox, PY = (y) => y + oy - b.miny;
+        txt(PX(b.minx) + 0.2, PY(b.maxy) + 0.4, th * 1.2, det.title, 'YAZI');
+        det.items.forEach((m) => placeItem(m, PX, PY, layerOf));
+        cursorY = oy - 2.2;                          // sonraki detay için boşluk
+      });
+    }
+
     return assemble(e);
+
+    function placeItem(m, PX, PY, layerOf) {
+      const lyr = layerOf[m.cls] || 'DONATI';
+      if (m.t === 'line') line(PX(m.x1), PY(m.y1), PX(m.x2), PY(m.y2), lyr);
+      else if (m.t === 'rect') {
+        line(PX(m.x), PY(m.y), PX(m.x + m.w), PY(m.y), lyr);
+        line(PX(m.x + m.w), PY(m.y), PX(m.x + m.w), PY(m.y + m.h), lyr);
+        line(PX(m.x + m.w), PY(m.y + m.h), PX(m.x), PY(m.y + m.h), lyr);
+        line(PX(m.x), PY(m.y + m.h), PX(m.x), PY(m.y), lyr);
+      } else if (m.t === 'circle') circle(PX(m.x), PY(m.y), m.r * S, lyr);
+      else if (m.t === 'pballoon') {
+        circle(PX(m.x), PY(m.y), 0.13 * S, 'YAZI');
+        txt(PX(m.x) - 0.08, PY(m.y) - 0.07, th * 0.7, String(m.poz), 'YAZI');
+      } else if (m.t === 'text') {
+        txt(PX(m.x), PY(m.y), Math.max(0.12, m.size) * S, m.s, lyr === 'OLCU' ? 'OLCU' : 'YAZI');
+      }
+    }
 
     // Büküm şeklini (cm bacaklar) DONATI katmanına gerçek geometriyle çizer
     function drawShapeDXF(shape, bx, by, bw, bh) {

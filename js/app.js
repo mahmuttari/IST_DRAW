@@ -84,7 +84,7 @@
   }
 
   let lastSVG = '';
-  const last = { geo: null, rebar: null, mat: null };
+  const last = { geo: null, rebar: null, mat: null, quant: null, details: null };
 
   function run() {
     const type = app.type;
@@ -109,8 +109,9 @@
     const rebar = type === 'cantilever'
       ? Rebar.designCantilever(geo, model, res, mat) : null;
     const quant = Rebar.quantities(geo, rebar, mat, mat.wallLength);
+    const details = (rebar && type === 'cantilever') ? Details.build(geo, rebar, mat) : null;
 
-    last.geo = geo; last.rebar = rebar; last.mat = mat; last.quant = quant;
+    last.geo = geo; last.rebar = rebar; last.mat = mat; last.quant = quant; last.details = details;
 
     lastSVG = Draw.render(geo, {
       showPressure: true,
@@ -119,6 +120,8 @@
     $('drawing').innerHTML = lastSVG;
     $('schedule').innerHTML = Draw.renderSchedule(
       rebar ? quant.schedule : [], { stock: mat.stockLength, notes: quant.notes });
+    $('detailElevation').innerHTML = Details.renderSVG(details ? details.elevation : null);
+    $('detailPlan').innerHTML = Details.renderSVG(details ? details.plan : null);
 
     renderResults(res, geo, rebar, quant);
   }
@@ -323,7 +326,7 @@
   function downloadDXF() {
     if (!last.geo) run();
     if (!last.geo) return;
-    const dxf = DXF.build(last.geo, last.rebar, last.quant, {});
+    const dxf = DXF.build(last.geo, last.rebar, last.quant, { details: last.details });
     downloadBlob(dxf, `istinat_duvari_${app.type}.dxf`, 'application/dxf');
   }
 
