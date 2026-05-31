@@ -48,6 +48,7 @@
       fck: num('fck'), fyk: num('fyk'), cover: num('cover'),
       loadFactor: num('loadFactor'),
       diaStem: num('diaStem'), diaFoot: num('diaFoot'), diaDist: num('diaDist'),
+      lapFactor: num('lapFactor'), stockLength: num('stockLength'),
       wallLength: num('wallLength'),
       showRebar: $('showRebar').checked,
     };
@@ -135,6 +136,11 @@
     const warnHtml = rebar.warnings.length
       ? `<div class="messages error" style="margin:8px 0">⚠ ${rebar.warnings.join('<br>')}</div>`
       : '';
+    const L = rebar.laps;
+    const lapRow = (lbl, lp, dia) => `
+      <tr><td>${lbl} (Ø${dia})</td>
+        <td class="numv">${Math.round(lp.lb)} mm</td>
+        <td class="numv"><strong>${Math.round(lp.l0)} mm</strong> (≈${Math.round(lp.l0 / dia)}Ø)</td></tr>`;
     return `
       <h3>Donatı (ön tasarım)</h3>
       ${warnHtml}
@@ -142,6 +148,10 @@
         <thead><tr><th>Konum</th><th>M_d (kNm/m)</th><th>As,ger (mm²/m)</th>
           <th>Seçim</th><th>As,var (mm²/m)</th></tr></thead>
         <tbody>
+          <tr><td>Filiz (düşey, temelden)</td><td class="numv">—</td>
+            <td class="numv">= gövde</td>
+            <td class="numv"><strong>Ø${rebar.filiz.dia}/${rebar.filiz.spacing}</strong></td>
+            <td class="numv">l₀=${Math.round(rebar.filiz.l0)} mm</td></tr>
           ${rebar.groups.map(grp).join('')}
           <tr><td>${rebar.dist.label}</td><td class="numv">—</td>
             <td class="numv">${Math.round(rebar.dist.AsReq)}</td>
@@ -149,12 +159,41 @@
             <td class="numv">${Math.round(rebar.dist.AsProv)}</td></tr>
         </tbody>
       </table>
+
+      <h3>Bindirme (ek) Boyları <small>TS500</small></h3>
+      <table class="res-table small">
+        <thead><tr><th>Donatı</th><th>ℓb (kenetlenme)</th><th>ℓ₀ (bindirme)</th></tr></thead>
+        <tbody>
+          ${lapRow('Gövde / filiz', L.stem, rebar.filiz.dia)}
+          ${lapRow('Temel', L.foot, rebar.groups[1].dia)}
+          ${lapRow('Yatay / dağıtma', L.dist, rebar.dist.dia)}
+        </tbody>
+      </table>
       <p class="note">* minimum donatı belirleyici. Yük katsayısı = ${fmt(rebar.moments.LF, 2)}.
-      Kenetlenme/bindirme boyları ve kesme donatısı dahil değildir.</p>`;
+      Filiz, gövde düşey donatısıyla ℓ₀ kadar bindirmeli eklenir. Kesme/çatlak
+      kontrolü ve çiroz dahil değildir.</p>`;
   }
 
   function quantitySection(quant) {
     const q = quant;
+    const cut = q.schedule.length ? `
+      <h3>Donatı Kesim Listesi <small>(stok ${fmt(q.stock, 0)} m)</small></h3>
+      <table class="res-table small">
+        <thead><tr><th>Poz</th><th>Çap/Aralık</th><th>Boy (m)</th><th>Adet</th>
+          <th>${fmt(q.stock, 0)}m çubuk</th><th>Fire (m)</th><th>kg</th></tr></thead>
+        <tbody>
+          ${q.schedule.map((r) => `
+          <tr><td>${r.label}</td><td>${r.detail}</td>
+            <td class="numv">${fmt(r.pieceLen, 2)}</td>
+            <td class="numv">${r.count}</td>
+            <td class="numv">${r.stockBars}</td>
+            <td class="numv">${fmt(r.waste, 1)} (${fmt(r.wastePct, 0)}%)</td>
+            <td class="numv">${fmt(r.mass, 0)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <p class="note">Filiz ve gövde devam donatısı ayrı pozlardır; uzun (yatay)
+      donatılarda stok boyu aşıldığında bindirme payı eklenir.</p>` : '';
+
     return `
       <h3>Metraj <small>(L = ${fmt(q.wallLength, 1)} m)</small></h3>
       <table class="res-table small">
@@ -164,20 +203,19 @@
             <td class="numv"><strong>${fmt(q.total.concrete, 2)} m³</strong></td></tr>
           <tr><td>Kalıp alanı</td><td class="numv">${fmt(q.perMeter.formwork, 2)} m²/m</td>
             <td class="numv"><strong>${fmt(q.total.formwork, 2)} m²</strong></td></tr>
-          <tr><td>Donatı ağırlığı</td><td class="numv">${fmt(q.perMeter.steel, 1)} kg/m</td>
+          <tr><td>Donatı (net)</td><td class="numv">—</td>
+            <td class="numv">${fmt(q.steelNet, 1)} kg</td></tr>
+          <tr><td>Donatı (fireli, sipariş)</td><td class="numv">${fmt(q.perMeter.steel, 1)} kg/m</td>
             <td class="numv"><strong>${fmt(q.total.steel, 1)} kg</strong></td></tr>
+          ${q.stockBars ? `<tr><td>${fmt(q.stock, 0)} m çubuk adedi</td><td class="numv">—</td>
+            <td class="numv"><strong>${q.stockBars} adet</strong></td></tr>` : ''}
+          ${q.stockBars ? `<tr><td>Zayiat (fire) oranı</td><td class="numv">${fmt(q.cutWasteLen, 1)} m</td>
+            <td class="numv">${fmt(q.steelWastePct, 1)}%</td></tr>` : ''}
           ${q.steelRatio ? `<tr><td>Donatı oranı</td><td class="numv">—</td>
             <td class="numv">${fmt(q.steelRatio, 1)} kg/m³</td></tr>` : ''}
         </tbody>
       </table>
-      ${q.steelLines.length ? `
-      <table class="res-table small">
-        <thead><tr><th>Donatı pozisyonu</th><th>Seçim</th><th>kg/m</th></tr></thead>
-        <tbody>${q.steelLines.map((s) => `
-          <tr><td>${s.label}</td><td>${s.detail}</td>
-            <td class="numv">${fmt(s.kgPerM, 1)}</td></tr>`).join('')}
-        </tbody>
-      </table>` : ''}`;
+      ${cut}`;
   }
 
   function renderResults(res, geo, rebar, quant) {

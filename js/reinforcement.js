@@ -20,6 +20,23 @@ const Rebar = (function () {
   const barArea = (dia) => (Math.PI * dia * dia) / 4;        // mm²
   const barMass = (dia) => (dia * dia) / 162;                // kg/m (≈ ρ·A)
 
+  /*
+   * Kenetlenme ve bindirme (ek) boyu — TS500 (nervürlü çubuk).
+   *   fctk = 0.35·√fck,  fctd = fctk/1.5,  fyd = fyk/1.15
+   *   ℓb = 0.12·(fyd/fctd)·φ ≥ 20φ      (temel kenetlenme boyu)
+   *   ℓ0 = α·ℓb ≥ max(20φ, 150 mm)      (bindirme/ek boyu)
+   * Sonuç mm; ℓ0 5 cm'e yuvarlanır.
+   */
+  function lapLength(dia, fck, fyk, lapFactor) {
+    const fctk = 0.35 * Math.sqrt(fck);
+    const fctd = fctk / 1.5;
+    const fyd = fyk / 1.15;
+    const lb = Math.max(0.12 * (fyd / fctd) * dia, 20 * dia);
+    let l0 = Math.max((lapFactor || 1.4) * lb, 20 * dia, 150);
+    l0 = Math.ceil(l0 / 50) * 50;            // 5 cm yuvarlama
+    return { lb, l0 };                        // mm
+  }
+
   // Simpson ile sayısal integral (n çift)
   function integrate(f, a, b, n) {
     if (b <= a) return 0;
@@ -139,124 +156,225 @@ const Rebar = (function () {
     const heel = designGroup('Taban üst (arka topuk)', 'footTop',
       LF * Math.max(0, M_heel), tf, mat.diaFoot, mat);
 
-    /* --- 4) DAĞITMA / YATAY donatı (büzülme + dağıtma) --- */
+    /* --- 4) YATAY / DAĞITMA donatı (büzülme + dağıtma) --- */
     const AsDistReq = Math.max(0.20 * stem.AsProv, 0.0015 * 1000 * (d.tBot * 1000 - mat.cover));
     const distSel = chooseSpacing(AsDistReq, mat.diaDist, 100, 300);
     const dist = {
-      label: 'Dağıtma / yatay', position: 'dist',
+      label: 'Yatay / dağıtma', position: 'dist',
       dia: mat.diaDist, spacing: distSel.s,
       AsReq: AsDistReq, AsProv: distSel.AsProv,
     };
+
+    /* --- Bindirme boyları --- */
+    const lapStem = lapLength(mat.diaStem, mat.fck, mat.fyk, mat.lapFactor);
+    const lapFoot = lapLength(mat.diaFoot, mat.fck, mat.fyk, mat.lapFactor);
+    const lapDist = lapLength(mat.diaDist, mat.fck, mat.fyk, mat.lapFactor);
+    const laps = { stem: lapStem, foot: lapFoot, dist: lapDist };
 
     const groups = [stem, toe, heel];
     const warnings = groups.filter((x) => x.warn).map((x) => `${x.label}: ${x.warn}`);
 
     /* --- Donatı geometrisi (model uzayı) — SVG ve DXF ortak kullanır --- */
-    const c = mat.cover / 1000;          // m cinsinden paspayı
-    const hook = 0.20;                   // m, kanca/kenetlenme temsili
+    const c = mat.cover / 1000;                       // paspayı (m)
+    const l0s = lapStem.l0 / 1000;                    // gövde bindirme (m)
+    const bendS = Math.max(0.15, 12 * mat.diaStem / 1000);
+    const bendF = Math.max(0.15, 12 * mat.diaFoot / 1000);
     const bars = [];
+    // Arka yüz x'i (yükseklik y'de) — şevli yüz
+    const backX = (y) => xb + (d.xStemBackTop - xb) * ((y - tf) / Hs);
 
-    // Gövde çekme donatısı (arka yüze paralel, tabana kancalı)
+    // (a) FİLİZ — temelden çıkan, alt kancalı, gövde içine l0 kadar uzanır
+    const yFilizTop = tf + l0s;
+    bars.push({
+      layer: 'DONATI', kind: 'filiz',
+      label: `Filiz Ø${stem.dia}/${stem.spacing}`,
+      poly: [
+        { x: xb - c - bendS, y: c },                  // temel içi yatay kanca
+        { x: xb - c - 0.035, y: c },                  // (devam donatısından hafif ayrık)
+        { x: backX(yFilizTop) - c - 0.035, y: yFilizTop },
+      ],
+      labelPos: { x: Lt + c + 0.05, y: tf + l0s * 0.5 },
+    });
+    // (b) GÖVDE DÜŞEY (devam) — temel üstünden gövde tepesine
     bars.push({
       layer: 'DONATI', kind: 'main',
       label: `Ø${stem.dia}/${stem.spacing}`,
       poly: [
-        { x: xb - c - hook, y: c },      // taban içi yatay kanca
-        { x: xb - c, y: c },
-        { x: d.xStemBackTop - c, y: H - c }, // gövde boyunca yukarı (şevli)
+        { x: xb - c, y: tf },
+        { x: d.xStemBackTop - c, y: H - c },
       ],
-      labelPos: { x: xb - c, y: tf + Hs * 0.55 },
+      labelPos: { x: backX(tf + Hs * 0.6) - c, y: tf + Hs * 0.6 },
     });
-    // Gövde ön yüz nominal düşey donatı
+    // Bindirme kotası (filiz ↔ devam)
     bars.push({
-      layer: 'DONATI', kind: 'sec',
-      label: '',
+      layer: 'YAZI', kind: 'lapdim',
+      label: `L₀=${Math.round(lapStem.l0)}`,
+      a: { x: xb - c, y: tf }, b: { x: xb - c, y: yFilizTop },
+    });
+    // (c) GÖVDE ÖN YÜZ nominal düşey donatı
+    bars.push({
+      layer: 'DONATI', kind: 'sec', label: '',
       poly: [ { x: Lt + c, y: tf }, { x: Lt + c, y: H - c } ],
     });
-    // Taban alt donatısı (uçları yukarı kancalı, U)
+    // (d) TABAN ALT (ön ökçe → boydan boya, uçları yukarı kancalı)
     bars.push({
       layer: 'DONATI', kind: 'main',
       label: `Ø${toe.dia}/${toe.spacing}`,
       poly: [
-        { x: c, y: c + hook }, { x: c, y: c },
-        { x: B - c, y: c }, { x: B - c, y: c + hook },
+        { x: c, y: c + bendF }, { x: c, y: c },
+        { x: B - c, y: c }, { x: B - c, y: c + bendF },
       ],
-      labelPos: { x: Lt * 0.5 + c, y: c + 0.06 },
+      labelPos: { x: Lt * 0.5 + c, y: c + 0.07 },
     });
-    // Taban üst donatısı (uçları aşağı kancalı)
+    // (e) TABAN ÜST (arka topuk, uçları aşağı kancalı)
     bars.push({
       layer: 'DONATI', kind: 'main',
       label: `Ø${heel.dia}/${heel.spacing}`,
       poly: [
-        { x: c, y: tf - c - hook }, { x: c, y: tf - c },
-        { x: B - c, y: tf - c }, { x: B - c, y: tf - c - hook },
+        { x: c, y: tf - c - bendF }, { x: c, y: tf - c },
+        { x: B - c, y: tf - c }, { x: B - c, y: tf - c - bendF },
       ],
-      labelPos: { x: (xb + B) / 2, y: tf - c - 0.06 },
+      labelPos: { x: (xb + B) / 2, y: tf - c - 0.07 },
     });
 
-    return { type: 'cantilever', groups, dist, bars, warnings,
+    // (f) YATAY donatı — gövde iki yüzü (kesite dik → nokta/daire)
+    const sh = dist.spacing / 1000;                    // m
+    const rDist = (mat.diaDist / 2) / 1000;
+    const nStem = Math.max(2, Math.min(16, Math.round((Hs - 0.2) / sh)));
+    for (let i = 0; i <= nStem; i++) {
+      const yy = tf + 0.1 + (Hs - 0.2) * (i / nStem);
+      bars.push({ layer: 'DONATI', kind: 'dot', r: rDist, x: backX(yy) - c, y: yy });
+      bars.push({ layer: 'DONATI', kind: 'dot', r: rDist, x: Lt + c, y: yy });
+    }
+    bars.push({ layer: 'YAZI', kind: 'note',
+      label: `Yatay Ø${dist.dia}/${dist.spacing}`,
+      labelPos: { x: Lt + c + 0.05, y: tf + Hs * 0.85 } });
+
+    // (g) TABAN boyuna (yatay) donatı — alt ve üst sıra (nokta)
+    const nFoot = Math.max(2, Math.min(18, Math.round((B - 0.2) / 0.25)));
+    for (let i = 0; i <= nFoot; i++) {
+      const xx = c + 0.1 + (B - 0.2) * (i / nFoot);
+      bars.push({ layer: 'DONATI', kind: 'dot', r: rDist, x: xx, y: c });
+      bars.push({ layer: 'DONATI', kind: 'dot', r: rDist, x: xx, y: tf - c });
+    }
+
+    return { type: 'cantilever', groups, dist, laps, bars, warnings,
+      filiz: { dia: stem.dia, spacing: stem.spacing, l0: lapStem.l0 },
       moments: { Mstem, M_toe, M_heel, LF } };
   }
 
+  /*
+   * Bir donatı pozisyonu için 12 m (stok) çubuktan kesim planı + zayiat.
+   *   pieceLen: tek çubuğun boyu (m, kanca/bindirme dahil)
+   *   count:    toplam adet
+   *   lap:      pieceLen > stok ise eklerde kullanılacak bindirme (m)
+   */
+  function cutPlan(pieceLen, count, dia, stock, lap) {
+    const placed = pieceLen * count;              // net yerleşen boy (m)
+    let stockBars, lapExtra = 0, ordered;
+    if (pieceLen <= stock) {
+      const per = Math.floor(stock / pieceLen);   // bir stoktan kaç parça
+      stockBars = Math.ceil(count / per);
+    } else {
+      // Stoktan uzun: her çubuk eklerle yapılır (her ekte +lap)
+      const segs = Math.ceil(pieceLen / stock);
+      lapExtra = (segs - 1) * lap * count;
+      stockBars = Math.ceil((placed + lapExtra) / stock);
+    }
+    ordered = stockBars * stock;                  // satın alınan toplam boy (m)
+    const waste = ordered - placed - lapExtra;    // fire (artık parçalar)
+    return {
+      pieceLen, count, placed, lapExtra, stockBars, ordered, waste,
+      wastePct: ordered > 0 ? (waste / ordered) * 100 : 0,
+      mass: ordered * barMass(dia),               // satın alınan ağırlık (kg)
+      netMass: placed * barMass(dia),
+    };
+  }
+
   /* =====================================================================
-   * METRAJ (quantity take-off) — 1 m duvar uzunluğu için, L ile ölçeklenir
+   * METRAJ + DONATI KESİM LİSTESİ (12 m stok, zayiat)
    * ===================================================================== */
   function quantities(geo, rebar, mat, wallLength) {
     const L = wallLength > 0 ? wallLength : 1;
-    const STEEL = 7850; // kg/m³
+    const stock = mat.stockLength > 0 ? mat.stockLength : 12;
+    const d = geo.dims;
+    const c = mat.cover / 1000;
 
-    // Beton hacmi (m³/m): tüm beton poligon alanlarının toplamı
+    // Beton hacmi (m³/m)
     let concPerM = 0;
     geo.concrete.forEach((cmp) => { concPerM += polyArea(cmp.points); });
 
-    // Kalıp alanı (m²/m): kalıp gerektiren düşey/eğik yüzeyler
-    const d = geo.dims;
+    // Kalıp alanı (m²/m)
     let formPerM = 0;
     if (geo.type === 'cantilever') {
-      const backLen = Math.hypot(d.Hs, d.tBot - d.tTop);   // gövde arka yüz (şevli)
-      formPerM = d.Hs + backLen + 2 * d.tf;                // gövde ön+arka + taban iki uç
+      const backLen = Math.hypot(d.Hs, d.tBot - d.tTop);
+      formPerM = d.Hs + backLen + 2 * d.tf;
     } else {
-      formPerM = d.H + Math.hypot(d.H, d.b - d.a);         // ön (düşey) + arka (şevli)
+      formPerM = d.H + Math.hypot(d.H, d.b - d.a);
     }
 
-    // Donatı ağırlığı (kg/m duvar)
-    const steelLines = [];
-    let steelPerM = 0;
+    const schedule = [];
     if (rebar && geo.type === 'cantilever') {
-      const cM = mat.cover / 1000;
-      const anchor = 0.30;  // m, kenetlenme/bindirme payı (yaklaşık)
       const g = rebar.groups.reduce((o, x) => (o[x.position] = x, o), {});
-      // Gövde düşey: 1000/s adet/m, boy ≈ Hs + temel ankrajı + kanca
-      addSteel(steelLines, 'Gövde düşey', g.stemBack,
-        d.Hs + (d.tf - cM) + 0.15, '1000/s adet/m');
-      // Taban alt (enine): boy ≈ B + 2 kanca
-      addSteel(steelLines, 'Taban alt', g.footBot, geo.B + 0.40, '1000/s adet/m');
-      // Taban üst (enine): boy ≈ B + kanca
-      addSteel(steelLines, 'Taban üst', g.footTop, geo.B + 0.30, '1000/s adet/m');
-      // Dağıtma/yatay: gövde + taban yüksekliği boyunca, boy 1 m/m duvar
-      const distCount = (d.Hs / rebar.dist.spacing) * 1000 / 1000; // adet/m yükseklik → toplam adet = Hs/s
-      const distW = (d.Hs / (rebar.dist.spacing / 1000)) * 1.0 * barMass(rebar.dist.dia);
-      steelLines.push({
-        label: 'Dağıtma / yatay', detail: `Ø${rebar.dist.dia}/${rebar.dist.spacing}`,
-        kgPerM: distW,
-      });
-      steelPerM = steelLines.reduce((s, x) => s + x.kgPerM, 0);
+      const stem = g.stemBack, toe = g.footBot, heel = g.footTop;
+      const lapS = rebar.laps.stem.l0 / 1000;
+      const lapF = rebar.laps.foot.l0 / 1000;
+      const lapD = rebar.laps.dist.l0 / 1000;
+      const bendS = Math.max(0.15, 12 * stem.dia / 1000);
+      const bendF = Math.max(0.15, 12 * toe.dia / 1000);
+
+      // Enine (kesit düzlemindeki) çubuklar: adet = (1000/s)·L
+      const nTrans = (s) => Math.ceil((1000 / s) * L);
+
+      // (1) FİLİZ — temel içi (tf−c + alt kanca) + gövdeye l0 uzantı
+      add('Filiz (düşey)', stem.dia, stem.spacing,
+        (d.tf - c) + bendS + lapS, nTrans(stem.spacing));
+      // (2) GÖVDE DÜŞEY (devam) — gövde boyu + üst paspayı
+      add('Gövde düşey (devam)', stem.dia, stem.spacing,
+        (d.H - d.tf) - c, nTrans(stem.spacing));
+      // (3) GÖVDE ÖN YÜZ nominal (Ø dağıtma, /250)
+      add('Gövde ön yüz', rebar.dist.dia, 250,
+        (d.H - d.tf) - c, nTrans(250));
+      // (4) TABAN ALT (enine) — boydan boya + 2 kanca
+      add('Taban alt (enine)', toe.dia, toe.spacing,
+        (geo.B - 2 * c) + 2 * bendF, nTrans(toe.spacing));
+      // (5) TABAN ÜST (enine) — topuk + gövde + kenetlenme
+      add('Taban üst (enine)', heel.dia, heel.spacing,
+        Math.min(geo.B - 2 * c, d.Lh + d.tBot + lapF) + bendF, nTrans(heel.spacing));
+      // (6) GÖVDE YATAY — duvar boyunca (her iki yüz), adet = katman×2
+      const nStemH = Math.max(1, Math.round(d.Hs / (rebar.dist.spacing / 1000))) * 2;
+      addLong('Gövde yatay', rebar.dist.dia, rebar.dist.spacing, L, nStemH, lapD);
+      // (7) TABAN BOYUNA — duvar boyunca (alt+üst), adet = sıra×2
+      const nFootL = Math.max(1, Math.round((geo.B - 2 * c) / 0.25)) * 2;
+      addLong('Taban boyuna', rebar.dist.dia, 250, L, nFootL, lapD);
+
+      function add(label, dia, spacing, pieceLen, count) {
+        const cp = cutPlan(pieceLen, count, dia, stock, 0);
+        schedule.push(Object.assign({ label, dia, spacing, detail: `Ø${dia}/${spacing}` }, cp));
+      }
+      function addLong(label, dia, spacing, pieceLen, count, lap) {
+        const cp = cutPlan(pieceLen, count, dia, stock, lap);
+        schedule.push(Object.assign({ label, dia, spacing, detail: `Ø${dia}/${spacing}` }, cp));
+      }
     }
+
+    const totMass = schedule.reduce((s, r) => s + r.mass, 0);        // satın alınan
+    const totNet = schedule.reduce((s, r) => s + r.netMass, 0);      // net
+    const totWaste = schedule.reduce((s, r) => s + r.waste, 0);      // fire (m)
+    const totBars = schedule.reduce((s, r) => s + r.stockBars, 0);   // 12 m çubuk adedi
+    const totConc = concPerM * L;
 
     return {
-      wallLength: L,
-      perMeter: { concrete: concPerM, formwork: formPerM, steel: steelPerM },
-      total: { concrete: concPerM * L, formwork: formPerM * L, steel: steelPerM * L },
-      steelLines,
-      steelRatio: concPerM > 0 ? (steelPerM / concPerM) : 0, // kg/m³
+      wallLength: L, stock,
+      perMeter: { concrete: concPerM, formwork: formPerM, steel: totMass / L },
+      total: { concrete: totConc, formwork: formPerM * L, steel: totMass },
+      steelNet: totNet,
+      steelWastePct: totMass > 0 ? ((totMass - totNet) / totMass) * 100 : 0,
+      cutWasteLen: totWaste,
+      stockBars: totBars,
+      schedule,
+      steelRatio: totConc > 0 ? (totMass / totConc) : 0,             // kg/m³
     };
-
-    function addSteel(arr, label, grp, barLen, detail) {
-      if (!grp) return;
-      const nPerM = 1000 / grp.spacing;               // adet / m duvar
-      const kgPerM = nPerM * barLen * barMass(grp.dia);
-      arr.push({ label, detail: `Ø${grp.dia}/${grp.spacing}`, kgPerM, barLen, nPerM });
-    }
   }
 
   function polyArea(points) {
@@ -268,7 +386,7 @@ const Rebar = (function () {
     return Math.abs(a) / 2;
   }
 
-  return { designCantilever, quantities, barArea, barMass };
+  return { designCantilever, quantities, lapLength, cutPlan, barArea, barMass };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {

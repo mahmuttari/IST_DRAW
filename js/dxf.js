@@ -75,8 +75,17 @@ const DXF = (function () {
     // --- Donatı ---
     if (rebar && rebar.bars) {
       rebar.bars.forEach((b) => {
-        polyLines(b.poly, 'DONATI', false);
-        if (b.label) txt(b.labelPos.x, b.labelPos.y, th * 0.85, b.label, 'YAZI');
+        if (b.kind === 'dot') {
+          circle(b.x, b.y, (b.r || 0.006) * S, 'DONATI');
+        } else if (b.kind === 'lapdim') {
+          line(b.a.x - 0.18, b.a.y, b.a.x - 0.18, b.b.y, 'OLCU');
+          if (b.label) txt(b.a.x - 0.30, (b.a.y + b.b.y) / 2, th * 0.8, b.label, 'YAZI');
+        } else if (b.poly) {
+          polyLines(b.poly, 'DONATI', false);
+          if (b.label && b.labelPos) txt(b.labelPos.x, b.labelPos.y, th * 0.8, b.label, 'YAZI');
+        } else if (b.kind === 'note' && b.label) {
+          txt(b.labelPos.x, b.labelPos.y, th * 0.8, b.label, 'YAZI');
+        }
       });
     }
 

@@ -148,22 +148,43 @@ const Draw = (function () {
     out.push(`<text x="${sx - 4}" y="${(a + b) / 2}" font-size="10" fill="#222" text-anchor="middle" transform="rotate(-90 ${sx - 4} ${(a + b) / 2})">${label}</text>`);
   }
 
-  // Donatıyı kırmızı çizgilerle (model uzayındaki poligonlar) çizer.
+  // Donatıyı çizer: çizgiler (düşey/enine), filiz, yatay donatı noktaları,
+  // bindirme kotası ve etiketler.
+  const REBAR = '#d6336c', FILIZ = '#7048e8';
+
   function drawRebar(out, rebar, X, Y) {
+    // 1) Çubuklar / noktalar
     rebar.bars.forEach((b) => {
-      const pts = b.poly.map((p) => `${X(p.x)},${Y(p.y)}`).join(' ');
-      const w = b.kind === 'main' ? 2.0 : 1.1;
-      out.push(`<polyline points="${pts}" fill="none" stroke="#d6336c" ` +
-        `stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"/>`);
+      if (b.kind === 'dot') {
+        const r = Math.max(2.2, (b.r || 0.006) * 1000 * 0 + 2.6);
+        out.push(`<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="${r}" ` +
+          `fill="${REBAR}" stroke="#fff" stroke-width="0.5"/>`);
+      } else if (b.kind === 'lapdim') {
+        const sx = X(b.a.x) - 14;
+        out.push(`<line x1="${sx}" y1="${Y(b.a.y)}" x2="${sx}" y2="${Y(b.b.y)}" ` +
+          `stroke="${FILIZ}" stroke-width="1" marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>`);
+      } else if (b.poly) {
+        const pts = b.poly.map((p) => `${X(p.x)},${Y(p.y)}`).join(' ');
+        const col = b.kind === 'filiz' ? FILIZ : REBAR;
+        const w = b.kind === 'sec' ? 1.1 : 2.0;
+        const dash = b.kind === 'filiz' ? ' stroke-dasharray="6,3"' : '';
+        out.push(`<polyline points="${pts}" fill="none" stroke="${col}" ` +
+          `stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"${dash}/>`);
+      }
     });
-    // Etiketler (en üste)
+    // 2) Etiketler (en üstte)
     rebar.bars.forEach((b) => {
-      if (b.label && b.labelPos) {
+      if (b.kind === 'lapdim' && b.label) {
+        const sx = X(b.a.x) - 14, my = (Y(b.a.y) + Y(b.b.y)) / 2;
+        out.push(`<text x="${sx - 3}" y="${my}" font-size="9" fill="${FILIZ}" ` +
+          `text-anchor="middle" transform="rotate(-90 ${sx - 3} ${my})">${b.label}</text>`);
+      } else if (b.label && b.labelPos) {
+        const col = b.kind === 'filiz' ? FILIZ : (b.kind === 'note' ? '#b08900' : REBAR);
         out.push(`<rect x="${X(b.labelPos.x) - 2}" y="${Y(b.labelPos.y) - 9}" ` +
-          `width="${b.label.length * 6.2 + 6}" height="13" rx="2" fill="#fff" ` +
-          `fill-opacity="0.82" stroke="#d6336c" stroke-width="0.5"/>`);
+          `width="${b.label.length * 5.9 + 6}" height="13" rx="2" fill="#fff" ` +
+          `fill-opacity="0.82" stroke="${col}" stroke-width="0.5"/>`);
         out.push(text(X(b.labelPos.x) + 2, Y(b.labelPos.y), b.label,
-          { size: 10, anchor: 'start', fill: '#d6336c', weight: 'bold' }));
+          { size: 9.5, anchor: 'start', fill: col, weight: 'bold' }));
       }
     });
   }

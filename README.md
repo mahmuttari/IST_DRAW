@@ -16,10 +16,14 @@ tamamen tarayıcıda çalışan (kurulum gerektirmeyen) bir uygulama.
   - Zemin gerilmesi (σ_max ≤ σ_emniyet) ve dış merkezlik (e ≤ B/6)
 - **Donatı ön tasarımı (konsol tip, TS500/EC2 dikdörtgen blok):**
   - Gövde düşey çekme donatısı, ön ökçe alt ve arka topuk üst donatıları
-  - Dağıtma/yatay donatı, minimum donatı kontrolü, çap & aralık seçimi
-  - Malzeme (fck, fyk), paspayı ve yük katsayısı girdileri
-- **Metraj:** beton hacmi (m³), kalıp alanı (m²), donatı ağırlığı (kg) —
-  girilen duvar uzunluğu (L) ile toplamlar; donatı oranı (kg/m³).
+  - **Temelden çıkan filiz** donatıları (alt kancalı) ve gövde devam donatısı
+  - **Yatay donatılar** (gövde iki yüzü + temel boyuna) — kesitte nokta gösterimi
+  - **Bindirme (ek) boyu** ℓ₀ = α·ℓb (TS500 kenetlenme); filiz↔devam eki
+  - Minimum donatı kontrolü, otomatik çap & aralık seçimi
+  - Malzeme (fck, fyk), paspayı, yük katsayısı ve bindirme katsayısı girdileri
+- **Metraj + donatı kesim listesi:** beton (m³), kalıp (m²), donatı ağırlığı (kg).
+  - Standart **12 m stok** çubuktan kesim planı, **zayiat (fire)** oranı ve
+    sipariş edilecek 12 m çubuk adedi; net/fireli ağırlık ve donatı oranı (kg/m³).
 - **DXF dışa aktarım:** kesit + donatı + kotalar, katmanlı (BETON, DONATI, ZEMIN,
   DOLGU, OLCU, YAZI) AutoCAD R12 DXF olarak. Tüm CAD programlarında açılır.
 - Yatay/eğimli dolgu (β), sürşarj yükü (q) ve ayrı taban sürtünme açısı desteği.
