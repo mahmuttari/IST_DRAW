@@ -36,7 +36,9 @@ const Draw = (function () {
 
     const out = [];
     out.push(`<svg xmlns="${NS}" viewBox="0 0 ${CANVAS.w} ${CANVAS.h}" ` +
-      `class="wall-svg" font-family="Arial, sans-serif">`);
+      `class="wall-svg" font-family="Arial, sans-serif" ` +
+      `data-scale="${scale}" data-ox="${MARGIN.left}" data-oy="${CANVAS.h - MARGIN.bottom}" ` +
+      `data-vbw="${CANVAS.w}">`);
 
     // Desenler
     out.push(`<defs>
@@ -107,12 +109,18 @@ const Draw = (function () {
       drawRebar(out, opts.rebar, X, Y);
     }
 
-    // --- Ölçülendirme (kotalar) ---
+    // --- Ölçülendirme (kotalar) — etkileşimliyse tıklanabilir/sürüklenebilir ---
     geo.dimLines = [];
-    drawDims(out, geo, X, Y, scale);
+    drawDims(out, geo, X, Y, scale, opts.interactive);
+    if (opts.interactive) drawHandles(out, geo, X, Y);
 
     // --- Başlık / ölçek ---
-    const title = geo.type === 'cantilever' ? 'KONSOL İSTİNAT DUVARI' : 'AĞIRLIK İSTİNAT DUVARI';
+    const TITLES = {
+      cantilever: 'KONSOL İSTİNAT DUVARI',
+      lwall: 'L TİPİ KONSOL İSTİNAT DUVARI',
+      gravity: 'AĞIRLIK İSTİNAT DUVARI',
+    };
+    const title = TITLES[geo.type] || 'İSTİNAT DUVARI';
     out.push(text(CANVAS.w / 2, 30, title, { size: 15, weight: 'bold', anchor: 'middle' }));
     out.push(text(CANVAS.w / 2, 48, 'Kesit — ölçüler metre (m)', { size: 11, anchor: 'middle', fill: '#666' }));
     out.push(text(MARGIN.left, CANVAS.h - 18, `Ölçek ≈ 1 : ${Math.round(100 / scale)}  (1 m ≈ ${fmt(scale)} px)`, { size: 10, fill: '#888', anchor: 'start' }));
@@ -128,24 +136,36 @@ const Draw = (function () {
       `font-weight="${o.weight || 'normal'}">${s}</text>`;
   }
 
+  // Tıklanabilir ölçü etiketi: interactive ise data-field ile düzenlenebilir
+  function dimLabel(tx, ty, label, field, rot) {
+    const rotAttr = rot ? ` transform="rotate(-90 ${tx} ${ty})"` : '';
+    if (field) {
+      return `<g class="dim-edit" data-field="${field}" style="cursor:pointer">` +
+        `<rect x="${tx - label.length * 3 - 3}" y="${ty - 10}" width="${label.length * 6 + 6}" height="13" ` +
+        `rx="2" fill="#fff8e1" stroke="#f0c000" stroke-width="0.6"${rotAttr}/>` +
+        `<text x="${tx}" y="${ty}" font-size="10" fill="#7a5b00" text-anchor="middle" font-weight="600"${rotAttr}>${label}</text></g>`;
+    }
+    return `<text x="${tx}" y="${ty}" font-size="10" fill="#222" text-anchor="middle"${rotAttr}>${label}</text>`;
+  }
+
   // Yatay kota çizgisi (x1->x2), model y=yLvl, ekran offseti px (aşağı +)
-  function hDim(out, X, Y, x1, x2, yLvl, off, label) {
+  function hDim(out, X, Y, x1, x2, yLvl, off, label, field) {
     const sy = Y(yLvl) + off;
     const a = X(x1), b = X(x2);
     out.push(`<line x1="${a}" y1="${Y(yLvl)}" x2="${a}" y2="${sy + 4}" stroke="#999" stroke-width="0.6"/>`);
     out.push(`<line x1="${b}" y1="${Y(yLvl)}" x2="${b}" y2="${sy + 4}" stroke="#999" stroke-width="0.6"/>`);
     out.push(`<line x1="${a}" y1="${sy}" x2="${b}" y2="${sy}" stroke="#333" stroke-width="0.9" marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>`);
-    out.push(text((a + b) / 2, sy - 4, label, { size: 10 }));
+    out.push(dimLabel((a + b) / 2, sy - 4, label, field, false));
   }
 
   // Düşey kota çizgisi (y1->y2), model x=xLvl, ekran offseti px (sola +)
-  function vDim(out, X, Y, y1, y2, xLvl, off, label) {
+  function vDim(out, X, Y, y1, y2, xLvl, off, label, field) {
     const sx = X(xLvl) - off;
     const a = Y(y1), b = Y(y2);
     out.push(`<line x1="${X(xLvl)}" y1="${a}" x2="${sx - 4}" y2="${a}" stroke="#999" stroke-width="0.6"/>`);
     out.push(`<line x1="${X(xLvl)}" y1="${b}" x2="${sx - 4}" y2="${b}" stroke="#999" stroke-width="0.6"/>`);
     out.push(`<line x1="${sx}" y1="${a}" x2="${sx}" y2="${b}" stroke="#333" stroke-width="0.9" marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>`);
-    out.push(`<text x="${sx - 4}" y="${(a + b) / 2}" font-size="10" fill="#222" text-anchor="middle" transform="rotate(-90 ${sx - 4} ${(a + b) / 2})">${label}</text>`);
+    out.push(dimLabel(sx - 4, (a + b) / 2, label, field, true));
   }
 
   // Donatıyı çizer: çubuklar, filiz, yatay donatı daireleri, çiroz, barbakan,
@@ -206,26 +226,51 @@ const Draw = (function () {
     });
   }
 
-  function drawDims(out, geo, X, Y, scale) {
+  // İnteraktif modda etiketler hangi input id'sini düzenler (field).
+  function drawDims(out, geo, X, Y, scale, interactive) {
     const d = geo.dims;
-    if (geo.type === 'cantilever') {
-      // Toplam genişlik B (en altta)
+    const F = interactive ? (id) => id : () => null;   // field yalnız interaktif modda
+    if (geo.type === 'cantilever' || geo.type === 'lwall') {
+      const p = geo.type === 'lwall' ? 'l_' : 'c_';     // form id öneki
       hDim(out, X, Y, 0, d.B, 0, 56, `B = ${fmt(d.B)}`);
-      // Ayrıntı: Lt | tBot | Lh (taban üstü hizasında)
-      hDim(out, X, Y, 0, d.Lt, 0, 32, `Lt=${fmt(d.Lt)}`);
-      hDim(out, X, Y, d.Lt, d.xStemBackBot, 0, 32, `${fmt(d.tBot)}`);
-      hDim(out, X, Y, d.xStemBackBot, d.B, 0, 32, `Lh=${fmt(d.Lh)}`);
-      // Toplam yükseklik H (solda)
-      vDim(out, X, Y, 0, d.H, 0, 60, `H = ${fmt(d.H)}`);
-      // Temel kalınlığı tf (solda alt)
-      vDim(out, X, Y, 0, d.tf, 0, 30, `tf=${fmt(d.tf)}`);
-      // Gövde üst kalınlığı (üstte)
-      hDim(out, X, Y, d.xStemFront, d.xStemBackTop, d.H, -16, `${fmt(d.tTop)}`);
+      if (geo.type === 'cantilever')
+        hDim(out, X, Y, 0, d.Lt, 0, 32, `Lt=${fmt(d.Lt)}`, F(p + 'Lt'));
+      hDim(out, X, Y, d.Lt, d.xStemBackBot, 0, 32, `${fmt(d.tBot)}`, F(p + 'tBot'));
+      hDim(out, X, Y, d.xStemBackBot, d.B, 0, 32, `Lh=${fmt(d.Lh)}`, F(p + 'Lh'));
+      vDim(out, X, Y, 0, d.H, 0, 60, `H = ${fmt(d.H)}`, F(p + 'H'));
+      vDim(out, X, Y, 0, d.tf, 0, 30, `tf=${fmt(d.tf)}`, F(p + 'tf'));
+      hDim(out, X, Y, d.xStemFront, d.xStemBackTop, d.H, -16, `${fmt(d.tTop)}`, F(p + 'tTop'));
     } else {
-      hDim(out, X, Y, 0, d.b, 0, 50, `b = ${fmt(d.b)}`);
-      vDim(out, X, Y, 0, d.H, 0, 50, `H = ${fmt(d.H)}`);
-      hDim(out, X, Y, 0, d.a, d.H, -16, `a = ${fmt(d.a)}`);
+      hDim(out, X, Y, 0, d.b, 0, 50, `b = ${fmt(d.b)}`, F('g_b'));
+      vDim(out, X, Y, 0, d.H, 0, 50, `H = ${fmt(d.H)}`, F('g_H'));
+      hDim(out, X, Y, 0, d.a, d.H, -16, `a = ${fmt(d.a)}`, F('g_a'));
     }
+  }
+
+  // Sürüklenebilir tutamaçlar — kilit köşeleri/kenarları temsil eder.
+  // Her tutamaç bir input id'sini ve sürükleme eksenini/işaretini taşır.
+  function drawHandles(out, geo, X, Y) {
+    const d = geo.dims;
+    const hs = [];
+    if (geo.type === 'cantilever' || geo.type === 'lwall') {
+      const p = geo.type === 'lwall' ? 'l_' : 'c_';
+      hs.push({ x: d.xStemFront, y: d.H, field: p + 'H', axis: 'y', sign: 1 });        // gövde tepe → H
+      hs.push({ x: 0, y: d.tf, field: p + 'tf', axis: 'y', sign: 1 });                  // temel üst → tf
+      if (geo.type === 'cantilever') hs.push({ x: 0, y: 0, field: p + 'Lt', axis: 'x', sign: -1, anchor: d.Lt }); // ön uç → Lt
+      hs.push({ x: d.B, y: 0, field: p + 'Lh', axis: 'x', sign: 1, anchor: d.xStemBackBot }); // arka uç → Lh
+      hs.push({ x: d.xStemBackBot, y: d.tf, field: p + 'tBot', axis: 'x', sign: 1, anchor: d.Lt }); // gövde arka alt → tBot
+      hs.push({ x: d.xStemBackTop, y: d.H, field: p + 'tTop', axis: 'x', sign: 1, anchor: d.xStemFront }); // gövde arka üst → tTop
+    } else {
+      hs.push({ x: d.a, y: d.H, field: 'g_H', axis: 'y', sign: 1 });
+      hs.push({ x: d.b, y: 0, field: 'g_b', axis: 'x', sign: 1 });
+      hs.push({ x: d.a, y: d.H, field: 'g_a', axis: 'x', sign: 1 });
+    }
+    hs.forEach((h) => {
+      out.push(`<circle class="drag-handle" data-field="${h.field}" data-axis="${h.axis}" ` +
+        `data-sign="${h.sign}" data-anchor="${h.anchor != null ? h.anchor : 0}" ` +
+        `cx="${X(h.x)}" cy="${Y(h.y)}" r="5.5" fill="#1f6feb" fill-opacity="0.85" ` +
+        `stroke="#fff" stroke-width="1.4" style="cursor:${h.axis === 'x' ? 'ew-resize' : 'ns-resize'}"/>`);
+    });
   }
 
   /* =====================================================================

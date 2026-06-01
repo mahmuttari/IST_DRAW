@@ -19,7 +19,7 @@ const Details = (function () {
   const cm = (m) => Math.round(m * 100);
 
   function build(geo, rebar, mat) {
-    if (!rebar || geo.type !== 'cantilever') return null;
+    if (!rebar || (geo.type !== 'cantilever' && geo.type !== 'lwall')) return null;
     const d = geo.dims;
     const P = {};
     rebar.pozlar.forEach((p) => { P[p.poz] = p; });

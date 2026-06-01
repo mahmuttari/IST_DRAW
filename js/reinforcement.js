@@ -271,7 +271,7 @@ const Rebar = (function () {
     let concPerM = 0;
     geo.concrete.forEach((cmp) => { concPerM += polyArea(cmp.points); });
     let formPerM;
-    if (geo.type === 'cantilever') formPerM = d.Hs + Math.hypot(d.Hs, d.tBot - d.tTop) + 2 * d.tf;
+    if (geo.type === 'cantilever' || geo.type === 'lwall') formPerM = d.Hs + Math.hypot(d.Hs, d.tBot - d.tTop) + 2 * d.tf;
     else formPerM = d.H + Math.hypot(d.H, d.b - d.a);
 
     const schedule = [];

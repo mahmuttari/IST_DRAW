@@ -43,6 +43,13 @@
     });
   }
 
+  function readLwall() {
+    return Object.assign(readCommon(), {
+      H: num('l_H'), tf: num('l_tf'), Lt: 0,
+      Lh: num('l_Lh'), tTop: num('l_tTop'), tBot: num('l_tBot'),
+    });
+  }
+
   function readMaterial() {
     return {
       fck: num('fck'), fyk: num('fyk'), cover: num('cover'),
@@ -70,8 +77,9 @@
     pos(d.gammaConcrete, 'Beton birim ağırlığı');
     pos(d.sigmaAllow, 'Zemin emniyet gerilmesi');
     if (!(d.phi > 0 && d.phi < 45)) errs.push('Sürtünme açısı φ 0–45° arası olmalı.');
-    if (type === 'cantilever') {
+    if (type === 'cantilever' || type === 'lwall') {
       pos(d.tf, 'Temel kalınlığı'); pos(d.tBot, 'Gövde alt kalınlığı');
+      pos(d.Lh, 'Arka topuk Lh');
       if (d.tf >= d.H) errs.push('Temel kalınlığı toplam yükseklikten küçük olmalı.');
       if (d.tTop > d.tBot) errs.push('Gövde üst kalınlığı, alt kalınlıktan büyük olamaz.');
       if (!(d.Lt >= 0 && d.Lh >= 0)) errs.push('Ökçe/topuk uzunlukları negatif olamaz.');
@@ -88,7 +96,8 @@
 
   function run() {
     const type = app.type;
-    const d = type === 'cantilever' ? readCantilever() : readGravity();
+    const d = type === 'gravity' ? readGravity()
+      : (type === 'lwall' ? readLwall() : readCantilever());
 
     const errs = validate(d, type);
     const msg = $('messages');
@@ -101,20 +110,22 @@
     msg.className = 'messages';
     msg.textContent = '';
 
-    const geo = type === 'cantilever' ? Geometry.cantilever(d) : Geometry.gravity(d);
+    const isCant = (type === 'cantilever' || type === 'lwall');
+    const geo = type === 'gravity' ? Geometry.gravity(d)
+      : (type === 'lwall' ? Geometry.lwall(d) : Geometry.cantilever(d));
     const model = Geometry.toAnalysisModel(geo, d);
     const res = Eng.analyze(model);
 
     const mat = readMaterial();
-    const rebar = type === 'cantilever'
-      ? Rebar.designCantilever(geo, model, res, mat) : null;
+    const rebar = isCant ? Rebar.designCantilever(geo, model, res, mat) : null;
     const quant = Rebar.quantities(geo, rebar, mat, mat.wallLength);
-    const details = (rebar && type === 'cantilever') ? Details.build(geo, rebar, mat) : null;
+    const details = (rebar && isCant) ? Details.build(geo, rebar, mat) : null;
 
     last.geo = geo; last.rebar = rebar; last.mat = mat; last.quant = quant; last.details = details;
 
     lastSVG = Draw.render(geo, {
       showPressure: true,
+      interactive: true,
       rebar: (mat.showRebar && rebar) ? rebar : null,
     });
     $('drawing').innerHTML = lastSVG;
@@ -339,6 +350,16 @@
     $('btnDXF').addEventListener('click', downloadDXF);
     $('btnDownload').addEventListener('click', downloadSVG);
     $('btnPrint').addEventListener('click', () => window.print());
+
+    // Önizleme üzerinden ölçü düzenleme (tıkla-düzenle + sürükleme)
+    if (typeof Interactive !== 'undefined') {
+      Interactive.attach({
+        host: $('drawing'),
+        getInput: (id) => document.getElementById(id),
+        onChange: run,
+      });
+    }
+
     setWallType('cantilever');
     run(); // varsayılan örnekle başla
   });

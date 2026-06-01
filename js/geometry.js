@@ -112,6 +112,15 @@ const Geometry = (function () {
     };
   }
 
+  /* ---------- L TİPİ KONSOL (ÖN ÖKÇESİZ) ---------- */
+  // Ön ökçe (parmak) olmayan konsol duvar — yalnız arka topuk. cantilever'in
+  // Lt=0 özel hali; statik/donatı motoru aynen kullanılır.
+  function lwall(d) {
+    const geo = cantilever(Object.assign({}, d, { Lt: 0 }));
+    geo.type = 'lwall';
+    return geo;
+  }
+
   // Hesap motoruna verilecek modeli derler.
   function toAnalysisModel(geo, d) {
     return {
@@ -130,7 +139,7 @@ const Geometry = (function () {
     };
   }
 
-  return { cantilever, gravity, toAnalysisModel };
+  return { cantilever, lwall, gravity, toAnalysisModel };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {

@@ -5,9 +5,13 @@ tamamen tarayıcıda çalışan (kurulum gerektirmeyen) bir uygulama.
 
 ## Özellikler
 
-- **İki duvar tipi:**
-  - Konsol (betonarme) istinat duvarı — T/L kesit (taban + şevli gövde)
+- **Üç duvar tipi:**
+  - Konsol (betonarme) istinat duvarı — T kesit (ön ökçe + arka topuk)
+  - L tipi konsol — ön ökçesiz (yalnız arka topuk)
   - Ağırlık duvarı — trapez kesit
+- **Önizleme üzerinden ölçü girişi:** kesitteki sarı ölçü etiketine **tıklayarak**
+  değer girilir veya mavi **tutamaçlar sürüklenerek** ölçü canlı değiştirilir;
+  çizim ve hesap anında güncellenir.
 - **Ölçekli SVG kesit çizimi:** kotalar (ölçü çizgileri), beton/dolgu taraması,
   zemin çizgisi, toprak itkisi (Pa) üçgen dağılımı ve **donatı detayı**.
 - **Stabilite kontrolleri (1 m duvar uzunluğu için, Rankine yöntemi):**
@@ -64,6 +68,7 @@ js/engineering.js     Stabilite hesapları (Rankine itki, güvenlik kontrolleri)
 js/geometry.js        Ölçülerden kesit geometrisinin üretimi
 js/reinforcement.js   Donatı ön tasarımı + metraj (beton/kalıp/çelik)
 js/draw.js            Geometri + donatıdan ölçekli SVG kesit ve poz cetveli
+js/interactive.js     Önizleme üzerinden ölçü düzenleme (tıkla-düzenle + sürükleme)
 js/details.js         Perde / Taban Plağı donatı detay görünüşleri (SVG primitive)
 js/dxf.js             Kesit + cetvel + detayların DXF (AutoCAD) olarak dışa aktarımı
 js/app.js             Arayüz mantığı (girdi → hesap → çizim/sonuç)
