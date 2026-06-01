@@ -118,6 +118,7 @@ const Draw = (function () {
     const TITLES = {
       cantilever: 'KONSOL İSTİNAT DUVARI',
       lwall: 'L TİPİ KONSOL İSTİNAT DUVARI',
+      counterfort: 'PAYANDALI İSTİNAT DUVARI (KESİT)',
       gravity: 'AĞIRLIK İSTİNAT DUVARI',
     };
     const title = TITLES[geo.type] || 'İSTİNAT DUVARI';
@@ -240,6 +241,13 @@ const Draw = (function () {
       vDim(out, X, Y, 0, d.H, 0, 60, `H = ${fmt(d.H)}`, F(p + 'H'));
       vDim(out, X, Y, 0, d.tf, 0, 30, `tf=${fmt(d.tf)}`, F(p + 'tf'));
       hDim(out, X, Y, d.xStemFront, d.xStemBackTop, d.H, -16, `${fmt(d.tTop)}`, F(p + 'tTop'));
+    } else if (geo.type === 'counterfort') {
+      hDim(out, X, Y, 0, d.B, 0, 56, `B = ${fmt(d.B)}`);
+      hDim(out, X, Y, 0, d.Lt, 0, 32, `Lt=${fmt(d.Lt)}`, F('cf_Lt'));
+      hDim(out, X, Y, d.Lt, d.xStemBackBot, 0, 32, `${fmt(d.tStem)}`, F('cf_tStem'));
+      hDim(out, X, Y, d.xStemBackBot, d.B, 0, 32, `Lh=${fmt(d.Lh)}`, F('cf_Lh'));
+      vDim(out, X, Y, 0, d.H, 0, 60, `H = ${fmt(d.H)}`, F('cf_H'));
+      vDim(out, X, Y, 0, d.tf, 0, 30, `tf=${fmt(d.tf)}`, F('cf_tf'));
     } else {
       hDim(out, X, Y, 0, d.b, 0, 50, `b = ${fmt(d.b)}`, F('g_b'));
       vDim(out, X, Y, 0, d.H, 0, 50, `H = ${fmt(d.H)}`, F('g_H'));
@@ -260,6 +268,12 @@ const Draw = (function () {
       hs.push({ x: d.B, y: 0, field: p + 'Lh', axis: 'x', sign: 1, anchor: d.xStemBackBot }); // arka uç → Lh
       hs.push({ x: d.xStemBackBot, y: d.tf, field: p + 'tBot', axis: 'x', sign: 1, anchor: d.Lt }); // gövde arka alt → tBot
       hs.push({ x: d.xStemBackTop, y: d.H, field: p + 'tTop', axis: 'x', sign: 1, anchor: d.xStemFront }); // gövde arka üst → tTop
+    } else if (geo.type === 'counterfort') {
+      hs.push({ x: d.xStemFront, y: d.H, field: 'cf_H', axis: 'y', sign: 1 });
+      hs.push({ x: 0, y: d.tf, field: 'cf_tf', axis: 'y', sign: 1 });
+      hs.push({ x: 0, y: 0, field: 'cf_Lt', axis: 'x', sign: -1, anchor: d.Lt });
+      hs.push({ x: d.B, y: 0, field: 'cf_Lh', axis: 'x', sign: 1, anchor: d.xStemBackBot });
+      hs.push({ x: d.xStemBackBot, y: d.tf, field: 'cf_tStem', axis: 'x', sign: 1, anchor: d.Lt });
     } else {
       hs.push({ x: d.a, y: d.H, field: 'g_H', axis: 'y', sign: 1 });
       hs.push({ x: d.b, y: 0, field: 'g_b', axis: 'x', sign: 1 });

@@ -249,6 +249,130 @@ const Rebar = (function () {
     };
   }
 
+  /* =====================================================================
+   * PAYANDALI (CONTRFORT) DUVAR — DONATI TASARIMI
+   * Statik: gövde ve topuk payandalar arasında YATAY açıklık yapan sürekli
+   * plak; payanda ise düşey konsol (T-kiriş) gibi ana çekmeyi taşır.
+   * ===================================================================== */
+  function designCounterfort(geo, model, res, mat) {
+    const d = geo.dims;
+    const Ka = res.Ka, g = model.gammaSoil, q = model.q || 0, LF = mat.loadFactor;
+    const cosB = Math.cos(rad(model.beta || 0));
+    const B = geo.B, H = d.H, tf = d.tf, Hs = d.Hs, Lt = d.Lt, Lh = d.Lh;
+    const s = d.s, tc = d.tc, tStem = d.tStem;
+    const xb = d.xStemBackBot, c = mat.cover / 1000;
+    const L = mat.wallLength > 0 ? mat.wallLength : 1;
+
+    /* Gövde tabanındaki yatay itki şiddeti (kN/m², en alt lif) */
+    const pBot = (Ka * g * Hs + Ka * q) * cosB;            // taban kotunda basınç
+    const pOrt = (Ka * g * Hs / 2 + Ka * q) * cosB;        // ortalama
+
+    /* 1) GÖVDE — yatay açıklık (payandalar arası s), sürekli plak: M = p·s²/10 */
+    const MstemH = (pBot * s * s) / 10;                    // kNm/m (düşey şerit başına)
+    const stemH = designGroup('Gövde yatay (açıklık)', 'stemH', LF * MstemH, tStem, mat.diaStem, mat);
+
+    /* 2) GÖVDE düşey (mesnet/dağıtma) — payanda diplerinde + min */
+    const stemV = designGroup('Gövde düşey (dağıtma)', 'stemV',
+      LF * MstemH * 0.4, tStem, mat.diaDist, mat, { rhoMin: 0.0015 });
+
+    /* 3) PAYANDA ana çekme — düşey konsol: toplam itki Ptot, kol H/3 */
+    const Ptot = (0.5 * Ka * g * Hs * Hs + Ka * q * Hs) * cosB * s;   // kN (s genişlik)
+    const Mc = Ptot * (Hs / 3);                            // kNm (payanda dibinde)
+    const dCounter = (Lh) * 1000;                          // payanda faydalı yük. (eğik der.) ~ topuk
+    const flexC = flexAs(Mc, dCounter * 0.9, mat.fck, mat.fyk);
+    const nC = Math.max(2, Math.ceil(flexC.As * (tc) / barArea(mat.diaStem)));  // çubuk adedi
+    const counterMain = { label: 'Payanda ana çekme', dia: mat.diaStem, count: nC, As: flexC.As, M: Mc, warn: flexC.warn };
+
+    /* 4) PAYANDA bağ etriyeleri (gövde ve topuğu payandaya bağlar) */
+    const tie = { dia: mat.diaDist, spacing: Math.min(300, Math.round(stemH.spacing)) };
+
+    /* 5) TOPUK — payandalar arası yatay açıklık + net aşağı yük */
+    const wDown = g * (H - tf) + q + (geo.concrete[0].gamma * tf);
+    const MheelH = (wDown * s * s) / 10;
+    const heel = designGroup('Topuk (açıklık)', 'footTop', LF * MheelH, tf, mat.diaFoot, mat);
+    const toe = designGroup('Ön ökçe alt', 'footBot', LF * (res.qMax * Lt * Lt / 2), tf, mat.diaFoot, mat);
+
+    const laps = {
+      stem: lapLength(mat.diaStem, mat.fck, mat.fyk, mat.lapFactor),
+      foot: lapLength(mat.diaFoot, mat.fck, mat.fyk, mat.lapFactor),
+      dist: lapLength(mat.diaDist, mat.fck, mat.fyk, mat.lapFactor),
+    };
+    const groups = [stemH, stemV, heel, toe];
+    const warnings = [];
+    [stemH, heel, toe].forEach((x) => { if (x.warn) warnings.push(`${x.label}: ${x.warn}`); });
+    if (counterMain.warn) warnings.push(`${counterMain.label}: ${counterMain.warn}`);
+
+    /* ---- Poz listesi (kesit + plan ortak) ---- */
+    const spCm = (mm) => Math.round(mm / 10);
+    const cm = (m) => Math.round(m * 100);
+    const callout = (n, dia, sp, Lc) => `${n}Ø${dia}/${spCm(sp)} L=${Math.round(Lc)}`;
+    const nLen = (sp) => Math.ceil((L * 1000) / sp) + 1;
+    const nPay = Math.max(2, Math.round(L / s) + 1);       // payanda adedi
+    const sgo = (x1, y1, x2, y2) => ({ x1, y1, x2, y2, len: Math.hypot(x2 - x1, y2 - y1) });
+    const shpDuz = (Lc) => ({ type: 'duz', segs: [sgo(0, 0, Lc, 0)] });
+    const shpU = (w, h, dir) => ({ type: 'U', segs: [sgo(0, 0, w, 0), sgo(0, 0, 0, (dir || 1) * h), sgo(w, 0, w, (dir || 1) * h)] });
+
+    const pozlar = [];
+    const addP = (poz, name, face, dia, sp, count, shape, axis, Lc) => {
+      const Lcm = Lc != null ? Lc : shape.segs.reduce((a, x) => a + x.len, 0);
+      pozlar.push({ poz, name, face, dia, spacing: sp, count, shape, axis, Lcm, detail: `Ø${dia}/${spCm(sp)}`, callout: callout(count, dia, sp, Lcm) });
+    };
+    // Gövde yatay (ana, açıklık) — duvar boyunca, ön+arka yüz
+    addP('1', 'Gövde yatay (ön)', 'Ön', stemH.dia, stemH.spacing, Math.ceil(Hs / (stemH.spacing / 1000)) * 2, shpDuz(cm(L)), 'len', cm(L));
+    addP('2', 'Gövde yatay (arka)', 'Arka', stemH.dia, stemH.spacing, Math.ceil(Hs / (stemH.spacing / 1000)) * 2, shpDuz(cm(L)), 'len', cm(L));
+    // Gövde düşey (dağıtma)
+    addP('3', 'Gövde düşey', '', stemV.dia, stemV.spacing, nLen(stemV.spacing), shpDuz(cm(Hs - c)), 'across');
+    // Payanda ana çekme (eğik)
+    addP('4', 'Payanda ana çekme', '', counterMain.dia, Math.round(tc * 1000 / Math.max(1, counterMain.count)), counterMain.count * nPay, shpDuz(cm(Math.hypot(Hs, Lh))), 'across');
+    // Payanda bağ etriyeleri
+    addP('5', 'Payanda etriye', '', tie.dia, tie.spacing, Math.ceil(Hs / (tie.spacing / 1000)) * nPay, shpU(cm(tc - 2 * c), cm(0.08), 1), 'across');
+    // Topuk üst (açıklık) + alt
+    addP('6', 'Topuk üst', '', heel.dia, heel.spacing, nLen(heel.spacing), shpDuz(cm(Lh + tStem)), 'across');
+    addP('7', 'Taban alt', '', toe.dia, toe.spacing, nLen(toe.spacing), shpU(cm(B - 2 * c), cm(0.12), 1), 'across');
+    // Taban boyuna (dağıtma)
+    addP('8', 'Taban boyuna', '', mat.diaDist, 230, Math.max(2, Math.round(B / 0.25)) * 2, shpDuz(cm(L)), 'len', cm(L));
+
+    /* ---- Kesit donatı geometrisi ---- */
+    const bars = [];
+    const HsTop = H - c;
+    // Payanda ana çekme (eğik arka yüz)
+    bars.push({ kind: 'main', poz: '4', label: `${counterMain.count}Ø${counterMain.dia}`, poly: [{ x: B - c, y: tf + c }, { x: xb + c, y: HsTop }], labelPos: { x: (B + xb) / 2, y: tf + Hs * 0.5 } });
+    // Gövde düşey
+    bars.push({ kind: 'sec', poz: '3', label: `Ø${stemV.dia}/${spCm(stemV.spacing)}`, poly: [{ x: Lt + c, y: tf }, { x: Lt + c, y: HsTop }], labelPos: { x: Lt + c - 0.02, y: tf + Hs * 0.6 } });
+    // Gövde yatay (ön/arka yüz → daire)
+    const rD = Math.max(0.006, mat.diaStem / 2 / 1000);
+    const nSt = Math.max(2, Math.min(20, Math.round((Hs - 0.2) / (stemH.spacing / 1000))));
+    for (let i = 0; i <= nSt; i++) {
+      const yy = tf + 0.1 + (Hs - 0.2) * (i / nSt);
+      bars.push({ kind: 'dot', r: rD, x: Lt + c, y: yy });
+      bars.push({ kind: 'dot', r: rD, x: xb - c, y: yy });
+    }
+    bars.push({ kind: 'note', poz: '1', label: `Yatay Ø${stemH.dia}/${spCm(stemH.spacing)}`, labelPos: { x: Lt + c - 0.32, y: tf + Hs * 0.3 } });
+    // Taban alt U
+    const hookB = Math.max(0.10, tf - 2 * c);
+    bars.push({ kind: 'main', poz: '7', label: `Ø${toe.dia}/${spCm(toe.spacing)}`, poly: [{ x: c, y: c + hookB }, { x: c, y: c }, { x: B - c, y: c }, { x: B - c, y: c + hookB }], labelPos: { x: B * 0.5, y: c + 0.06 } });
+    // Topuk üst
+    bars.push({ kind: 'main', poz: '6', label: `Ø${heel.dia}/${spCm(heel.spacing)}`, poly: [{ x: xb, y: tf - c }, { x: B - c, y: tf - c }], labelPos: { x: (xb + B) / 2, y: tf - c - 0.05 } });
+    // Barbakan
+    const barb = { dia: mat.barbakanDia || 100, s: mat.barbakanS || 100 };
+    const ciroz = { sH: mat.cirozH || 50, sV: mat.cirozV || 50, dia: mat.diaCiroz || 8 };
+    bars.push({ kind: 'barbakan', x: Lt + tStem * 0.5, y: tf + Hs * 0.4, label: `Ø${barb.dia} barbakan` });
+
+    const notes = {
+      barbakan: `Ø${barb.dia} barbakan; yatay/düşey ${barb.s}cm aralıkla`,
+      ciroz: `Payanda aks aralığı s=${(s * 100).toFixed(0)}cm; payanda kalınlığı tc=${(tc * 100).toFixed(0)}cm`,
+      barbData: barb, cirozData: ciroz,
+    };
+
+    return {
+      type: 'counterfort', groups, dist: { dia: mat.diaDist, spacing: tie.spacing }, laps, bars, warnings, pozlar, notes,
+      counterMain,
+      filiz: { dia: stemH.dia, spacing: stemH.spacing, l0: laps.stem.l0 },
+      moments: { MstemH, Mc, MheelH, LF },
+      geomCache: { c, L, hookB, sBase: toe.spacing, sLong: 230, dist: { dia: mat.diaDist, spacing: tie.spacing }, stem: stemH, ciroz, barb, s, tc, nPay },
+    };
+  }
+
   /* Kesim planı + zayiat (stok çubuk) */
   function cutPlan(pieceLen, count, dia, stock, lap) {
     const placed = pieceLen * count;
@@ -271,7 +395,8 @@ const Rebar = (function () {
     let concPerM = 0;
     geo.concrete.forEach((cmp) => { concPerM += polyArea(cmp.points); });
     let formPerM;
-    if (geo.type === 'cantilever' || geo.type === 'lwall') formPerM = d.Hs + Math.hypot(d.Hs, d.tBot - d.tTop) + 2 * d.tf;
+    if (geo.type === 'counterfort') formPerM = 2 * d.Hs + 2 * d.tf + d.smear * Math.hypot(d.Hs, d.Lh);
+    else if (geo.type === 'cantilever' || geo.type === 'lwall') formPerM = d.Hs + Math.hypot(d.Hs, d.tBot - d.tTop) + 2 * d.tf;
     else formPerM = d.H + Math.hypot(d.H, d.b - d.a);
 
     const schedule = [];
@@ -309,7 +434,7 @@ const Rebar = (function () {
     return Math.abs(a) / 2;
   }
 
-  return { designCantilever, quantities, lapLength, cutPlan, barArea, barMass };
+  return { designCantilever, designCounterfort, quantities, lapLength, cutPlan, barArea, barMass };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {

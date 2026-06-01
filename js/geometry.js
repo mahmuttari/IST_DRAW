@@ -121,6 +121,64 @@ const Geometry = (function () {
     return geo;
   }
 
+  /* ---------- PAYANDALI (CONTRFORT) İSTİNAT DUVARI ----------
+   * Dolgu tarafında, gövdeyi ve topuğu bağlayan düşey payandalar (s aralıkla).
+   * Kesit, bir payanda hizasından alınır: taban + sabit kalınlıklı gövde +
+   * arka tarafta üçgen payanda. Stabilite metre başına hesaplandığından, payanda
+   * betonu (tc/s) oranıyla "yayılmış" gamma ile modele katılır.
+   *   d: { H, tf, Lt, Lh, tStem, s, tc, gammaConcrete, gammaSoil, ... }
+   */
+  function counterfort(d) {
+    const H = d.H, tf = d.tf, Lt = d.Lt, Lh = d.Lh;
+    const tStem = d.tStem;                 // gövde (sabit) kalınlığı
+    const s = d.s;                          // payanda aks aralığı
+    const tc = d.tc;                        // payanda kalınlığı (genişliği)
+    const B = Lt + tStem + Lh;
+    const Hs = H - tf;
+    const xSF = Lt;                         // gövde ön yüzü
+    const xSB = Lt + tStem;                 // gövde arka yüzü (payanda ön yüzü)
+
+    const base = [
+      { x: 0, y: 0 }, { x: B, y: 0 }, { x: B, y: tf }, { x: 0, y: tf },
+    ];
+    // Gövde (sabit kalınlık, düşey yüzler)
+    const stem = [
+      { x: xSF, y: tf }, { x: xSB, y: tf }, { x: xSB, y: H }, { x: xSF, y: H },
+    ];
+    // Payanda üçgeni (gövde arka yüzünden topuk arka ucuna, tepede gövde üstüne)
+    const counter = [
+      { x: xSB, y: tf }, { x: B, y: tf }, { x: xSB, y: H },
+    ];
+    // Dolgu: topuk üzerinde, payanda üçgeninin üstünde kalan kama
+    const soil = [
+      { x: xSB, y: tf }, { x: B, y: tf }, { x: B, y: H }, { x: xSB, y: H },
+    ];
+
+    // Payanda betonunu metre başına yay (tc/s). Üçgen bölgede payanda dolguyu
+    // BETONLA DEĞİŞTİRİR → net ek ağırlık (γc − γs)·smear; dolgu tam sayılır.
+    const smear = Math.min(1, tc / s);
+    const dims = { B, H, Hs, tf, Lt, Lh, tStem, s, tc, smear,
+      xStemFront: xSF, xStemBackBot: xSB, xStemBackTop: xSB,
+      tTop: tStem, tBot: tStem };
+
+    return {
+      type: 'counterfort',
+      B, H,
+      concrete: [
+        { label: 'Taban plağı', gamma: d.gammaConcrete, points: base },
+        { label: 'Gövde', gamma: d.gammaConcrete, points: stem },
+        { label: 'Payanda (net, yayılmış)',
+          gamma: Math.max(0, (d.gammaConcrete - d.gammaSoil) * smear), points: counter },
+      ],
+      soil: [
+        { label: 'Topuk üstü dolgu', gamma: d.gammaSoil, points: soil },
+      ],
+      // Çizim: payanda üçgenini ayrı göstermek için outline'a ekle
+      outline: { base, stem, counter, soil },
+      dims,
+    };
+  }
+
   // Hesap motoruna verilecek modeli derler.
   function toAnalysisModel(geo, d) {
     return {
@@ -139,7 +197,7 @@ const Geometry = (function () {
     };
   }
 
-  return { cantilever, lwall, gravity, toAnalysisModel };
+  return { cantilever, lwall, counterfort, gravity, toAnalysisModel };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {

@@ -5,9 +5,11 @@ tamamen tarayıcıda çalışan (kurulum gerektirmeyen) bir uygulama.
 
 ## Özellikler
 
-- **Üç duvar tipi:**
+- **Dört duvar tipi:**
   - Konsol (betonarme) istinat duvarı — T kesit (ön ökçe + arka topuk)
   - L tipi konsol — ön ökçesiz (yalnız arka topuk)
+  - Payandalı (contrfort) — gövde payandalar arası yatay açıklık yapar; payandalar
+    düşey çekmeyi taşır. Yüksek duvarlar için. Plan görünüşünde payanda düzeni.
   - Ağırlık duvarı — trapez kesit
 - **Önizleme üzerinden ölçü girişi:** kesitteki sarı ölçü etiketine **tıklayarak**
   değer girilir veya mavi **tutamaçlar sürüklenerek** ölçü canlı değiştirilir;

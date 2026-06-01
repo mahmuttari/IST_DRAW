@@ -68,6 +68,8 @@ const Interactive = (function () {
       l_H: 'Toplam yükseklik H (m)', l_tf: 'Temel kalınlığı (m)',
       l_Lh: 'Arka topuk Lh (m)',
       l_tTop: 'Gövde üst kalınlığı (m)', l_tBot: 'Gövde alt kalınlığı (m)',
+      cf_H: 'Toplam yükseklik H (m)', cf_tf: 'Temel kalınlığı (m)',
+      cf_Lt: 'Ön ökçe Lt (m)', cf_Lh: 'Arka topuk Lh (m)', cf_tStem: 'Gövde kalınlığı (m)',
       g_H: 'Yükseklik H (m)', g_a: 'Üst genişlik a (m)', g_b: 'Alt genişlik b (m)',
     };
     const v = window.prompt((labelMap[field] || field) + ' :', isFinite(cur) ? cur : '');

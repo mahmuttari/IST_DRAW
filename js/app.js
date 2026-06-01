@@ -50,6 +50,13 @@
     });
   }
 
+  function readCounterfort() {
+    return Object.assign(readCommon(), {
+      H: num('cf_H'), tf: num('cf_tf'), Lt: num('cf_Lt'), Lh: num('cf_Lh'),
+      tStem: num('cf_tStem'), s: num('cf_s'), tc: num('cf_tc'),
+    });
+  }
+
   function readMaterial() {
     return {
       fck: num('fck'), fyk: num('fyk'), cover: num('cover'),
@@ -77,7 +84,13 @@
     pos(d.gammaConcrete, 'Beton birim ağırlığı');
     pos(d.sigmaAllow, 'Zemin emniyet gerilmesi');
     if (!(d.phi > 0 && d.phi < 45)) errs.push('Sürtünme açısı φ 0–45° arası olmalı.');
-    if (type === 'cantilever' || type === 'lwall') {
+    if (type === 'counterfort') {
+      pos(d.tf, 'Temel kalınlığı'); pos(d.tStem, 'Gövde kalınlığı');
+      pos(d.Lh, 'Arka topuk Lh'); pos(d.s, 'Payanda aralığı s'); pos(d.tc, 'Payanda kalınlığı tc');
+      if (d.tf >= d.H) errs.push('Temel kalınlığı toplam yükseklikten küçük olmalı.');
+      if (d.tc > d.s) errs.push('Payanda kalınlığı tc, aralık s’den büyük olamaz.');
+      if (!(d.Lt >= 0)) errs.push('Ön ökçe negatif olamaz.');
+    } else if (type === 'cantilever' || type === 'lwall') {
       pos(d.tf, 'Temel kalınlığı'); pos(d.tBot, 'Gövde alt kalınlığı');
       pos(d.Lh, 'Arka topuk Lh');
       if (d.tf >= d.H) errs.push('Temel kalınlığı toplam yükseklikten küçük olmalı.');
@@ -97,7 +110,8 @@
   function run() {
     const type = app.type;
     const d = type === 'gravity' ? readGravity()
-      : (type === 'lwall' ? readLwall() : readCantilever());
+      : (type === 'lwall' ? readLwall()
+        : (type === 'counterfort' ? readCounterfort() : readCantilever()));
 
     const errs = validate(d, type);
     const msg = $('messages');
@@ -110,16 +124,18 @@
     msg.className = 'messages';
     msg.textContent = '';
 
-    const isCant = (type === 'cantilever' || type === 'lwall');
+    const hasRebar = (type === 'cantilever' || type === 'lwall' || type === 'counterfort');
     const geo = type === 'gravity' ? Geometry.gravity(d)
-      : (type === 'lwall' ? Geometry.lwall(d) : Geometry.cantilever(d));
+      : (type === 'lwall' ? Geometry.lwall(d)
+        : (type === 'counterfort' ? Geometry.counterfort(d) : Geometry.cantilever(d)));
     const model = Geometry.toAnalysisModel(geo, d);
     const res = Eng.analyze(model);
 
     const mat = readMaterial();
-    const rebar = isCant ? Rebar.designCantilever(geo, model, res, mat) : null;
+    const rebar = type === 'counterfort' ? Rebar.designCounterfort(geo, model, res, mat)
+      : (hasRebar ? Rebar.designCantilever(geo, model, res, mat) : null);
     const quant = Rebar.quantities(geo, rebar, mat, mat.wallLength);
-    const details = (rebar && isCant) ? Details.build(geo, rebar, mat) : null;
+    const details = (rebar && hasRebar) ? Details.build(geo, rebar, mat) : null;
 
     last.geo = geo; last.rebar = rebar; last.mat = mat; last.quant = quant; last.details = details;
 

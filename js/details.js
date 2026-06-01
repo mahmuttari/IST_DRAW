@@ -19,7 +19,8 @@ const Details = (function () {
   const cm = (m) => Math.round(m * 100);
 
   function build(geo, rebar, mat) {
-    if (!rebar || (geo.type !== 'cantilever' && geo.type !== 'lwall')) return null;
+    const ok = ['cantilever', 'lwall', 'counterfort'];
+    if (!rebar || ok.indexOf(geo.type) < 0) return null;
     const d = geo.dims;
     const P = {};
     rebar.pozlar.forEach((p) => { P[p.poz] = p; });
@@ -31,10 +32,76 @@ const Details = (function () {
     const shDist = cache.dist.spacing / 1000;      // yatay donatı aralığı (m)
     const sBase = cache.sBase / 1000;              // taban enine aralığı (m)
 
+    if (geo.type === 'counterfort') {
+      return { elevation: buildCfElevation(), plan: buildCfPlan() };
+    }
+
     return {
       elevation: buildElevation(),
       plan: buildPlan(),
     };
+
+    /* ---------- PAYANDALI: PERDE BOY GÖRÜNÜŞ (payandalar görünür) ---------- */
+    function buildCfElevation() {
+      const it = [];
+      const ln = (x1, y1, x2, y2, c) => it.push({ t: 'line', x1, y1, x2, y2, cls: c });
+      const tx = (x, y, s, o) => it.push(Object.assign({ t: 'text', x, y, s }, o));
+      const s = cache.s, tc = cache.tc;
+      // Gövde yüzü + temel şeridi
+      it.push({ t: 'rect', x: 0, y: 0, w: L, h: Hs, cls: 'outline' });
+      it.push({ t: 'rect', x: 0, y: -tf, w: L, h: tf, cls: 'outline' });
+      // Payandalar (arka yüzde, s aralıkla) — kesik dikdörtgenler
+      for (let x = tc / 2; x <= L + 1e-6; x += s) {
+        it.push({ t: 'rect', x: x - tc / 2, y: 0, w: tc, h: Hs, cls: 'stemfoot' });
+      }
+      // Gövde yatay ana donatı (1/2) — birkaç kat
+      for (let i = 1; i <= 4; i++) {
+        const y = Hs * (i / 5);
+        ln(0.05, y, L - 0.05, y, i % 2 ? 'rebar' : 'rebar2');
+      }
+      tx(L / 2, Hs * 0.8 + 0.04, (P['1'] ? P['1'].callout : '') + ' (gövde yatay)', { size: 0.2, anchor: 'middle', cls: 'rebar' });
+      it.push({ t: 'pballoon', x: 0.3, y: Hs * 0.8, poz: '1' });
+      // Barbakan ızgarası
+      for (let x = barbS; x < L - 0.2; x += barbS)
+        for (let y = barbS * 0.6; y < Hs - 0.3; y += barbS)
+          it.push({ t: 'circle', x, y, r: 0.06, cls: 'barbakan' });
+      tx(0.05, -tf - 0.3, `Ø${cache.barb.dia} Barbakan — ${cache.barb.s}cm aralıkla`, { size: 0.2, anchor: 'start', cls: 'barbakan' });
+      // Payanda aralığı kotası
+      dimH(it, Hs + 0.5, tc / 2, tc / 2 + s, `s=${cm(s)}`);
+      dimH(it, -tf - 0.7, 0, L, `${cm(L)}`);
+      dimV(it, L + 0.5, 0, Hs, `${cm(Hs)}`);
+      return { title: 'PAYANDA YERLEŞİMİ (PERDE BOY GÖRÜNÜŞ)', items: it,
+        bounds: { minx: -1.2, maxx: L + 1.4, miny: -tf - 1.0, maxy: Hs + 1.0 } };
+    }
+
+    /* ---------- PAYANDALI: TABAN PLAN GÖRÜNÜŞ ---------- */
+    function buildCfPlan() {
+      const it = [];
+      const ln = (x1, y1, x2, y2, c) => it.push({ t: 'line', x1, y1, x2, y2, cls: c });
+      const tx = (x, y, ss, o) => it.push(Object.assign({ t: 'text', x, y, s: ss }, o));
+      const s = cache.s, tc = cache.tc, tStem = d.tStem;
+      it.push({ t: 'rect', x: 0, y: 0, w: L, h: B, cls: 'outline' });
+      // Gövde şeridi (ön kısım)
+      it.push({ t: 'rect', x: 0, y: Lt, w: L, h: tStem, cls: 'stemfoot' });
+      tx(L / 2, Lt + tStem / 2, 'GÖVDE (perde)', { size: 0.16, anchor: 'middle', cls: 'dim' });
+      // Payandalar (gövdeden topuğa uzanan dikdörtgenler, s aralıkla)
+      for (let x = tc / 2; x <= L + 1e-6; x += s) {
+        it.push({ t: 'rect', x: x - tc / 2, y: Lt + tStem, w: tc, h: Lh, cls: 'rebar' });
+      }
+      tx(L / 2, Lt + tStem + Lh * 0.5, `Payanda tc=${cm(tc)} / s=${cm(s)}`, { size: 0.18, anchor: 'middle', cls: 'rebar' });
+      it.push({ t: 'pballoon', x: tc / 2, y: Lt + tStem + Lh + 0.25, poz: '4' });
+      // Topuk boyuna donatı (8)
+      ln(0.1, B - 0.12, L - 0.1, B - 0.12, 'rebar2');
+      tx(L / 2, B - 0.02, (P['8'] ? P['8'].callout : '') + ' (taban boyuna)', { size: 0.16, anchor: 'middle', cls: 'rebar2' });
+      // Kotalar
+      dimH(it, B + 0.5, 0, L, `${cm(L)}`);
+      dimH(it, B + 1.0, tc / 2, tc / 2 + s, `s=${cm(s)}`);
+      dimV(it, L + 0.5, 0, B, `${cm(B)}`);
+      dimV(it, L + 1.0, 0, Lt, `${cm(Lt)}`);
+      dimV(it, L + 1.0, Lt + tStem, B, `${cm(Lh)}`);
+      return { title: 'TABAN PLAĞI + PAYANDA DÜZENİ (PLAN)', items: it,
+        bounds: { minx: -1.2, maxx: L + 1.6, miny: -1.0, maxy: B + 1.2 } };
+    }
 
     /* ---------- PERDE DONATI DETAYI (boy görünüş) ---------- */
     function buildElevation() {
