@@ -252,6 +252,63 @@
       ${cut}`;
   }
 
+  function pricingSection(geo, quant, mat) {
+    if (typeof Pricing === 'undefined') return '';
+    const p = Pricing.build(geo, quant, mat);
+    if (!p.rows.length) return '';
+
+    const body = p.rows.map((r, i) => `
+      <tr>
+        <td class="numv">${i + 1}</td>
+        <td>${r.poz}</td>
+        <td>${r.name}</td>
+        <td class="numv">${r.unit}</td>
+        <td class="numv">${Pricing.qtyFmt(r.qty, r.unit)}</td>
+        <td class="numv"><input class="up" type="number" step="1" min="0"
+          data-qty="${r.qty}" value="${r.unitPrice}"></td>
+        <td class="numv amt" id="amt-${i}">${Pricing.money(r.qty * r.unitPrice)}</td>
+      </tr>`).join('');
+
+    return `
+      <h3>Birim Fiyat Teklif Cetveli <small>(L = ${fmt(quant.wallLength, 1)} m)</small></h3>
+      <table class="res-table small pricing">
+        <thead><tr><th>S.No</th><th>Poz No</th><th>İş Kalemi</th><th>Birim</th>
+          <th>Miktar</th><th>Birim Fiyat (₺)</th><th>Tutar (₺)</th></tr></thead>
+        <tbody>${body}</tbody>
+        <tfoot>
+          <tr><td colspan="6" class="numv"><strong>Ara Toplam (KDV hariç)</strong></td>
+            <td class="numv"><strong id="pr-sub">0,00</strong></td></tr>
+          <tr><td colspan="6" class="numv">KDV (%${Math.round(Pricing.KDV * 100)})</td>
+            <td class="numv" id="pr-kdv">0,00</td></tr>
+          <tr><td colspan="6" class="numv"><strong>GENEL TOPLAM</strong></td>
+            <td class="numv"><strong id="pr-tot">0,00</strong></td></tr>
+        </tfoot>
+      </table>
+      <p class="note">Birim fiyatlar <strong>2026 yaklaşık, KDV hariç</strong> değerlerdir;
+      hücrelere tıklayıp güncelleyebilirsiniz (tutarlar anında yenilenir). Poz numaraları
+      ilgili ÇŞB poz ailesini gösterir, sözleşme yılının Birim Fiyat Kitabıyla teyit edilmelidir.
+      Kazı, geri dolgu, barbakan ve yalıtım miktarları geometriden türetilmiş yaklaşık
+      değerlerdir; nihai keşifte saha koşullarına göre revize edilmelidir.</p>`;
+  }
+
+  function recalcPricing() {
+    if (typeof Pricing === 'undefined') return;
+    const ups = document.querySelectorAll('#results .up');
+    let sub = 0;
+    ups.forEach((inp, i) => {
+      const qty = parseFloat(inp.dataset.qty) || 0;
+      const up = parseFloat(inp.value) || 0;
+      const amt = qty * up;
+      sub += amt;
+      const cell = $('amt-' + i);
+      if (cell) cell.textContent = Pricing.money(amt);
+    });
+    const kdv = sub * Pricing.KDV;
+    if ($('pr-sub')) $('pr-sub').textContent = Pricing.money(sub);
+    if ($('pr-kdv')) $('pr-kdv').textContent = Pricing.money(kdv);
+    if ($('pr-tot')) $('pr-tot').textContent = Pricing.money(sub + kdv);
+  }
+
   function renderResults(res, geo, rebar, quant) {
     const c = res.checks;
     const badge = (ok) => ok
@@ -331,7 +388,9 @@
 
       ${rebarSection(rebar, geo)}
       ${quantitySection(quant)}
+      ${pricingSection(geo, quant, last.mat)}
     `;
+    recalcPricing();
   }
 
   function downloadBlob(content, filename, mime) {
@@ -363,6 +422,10 @@
     document.querySelectorAll('.type-btn').forEach((b) =>
       b.addEventListener('click', () => { setWallType(b.dataset.type); run(); }));
     $('btnCalc').addEventListener('click', run);
+    // Teklif cetveli: birim fiyat düzenlenince tutarları anında yenile
+    $('results').addEventListener('input', (e) => {
+      if (e.target && e.target.classList.contains('up')) recalcPricing();
+    });
     $('btnDXF').addEventListener('click', downloadDXF);
     $('btnDownload').addEventListener('click', downloadSVG);
     $('btnPrint').addEventListener('click', () => window.print());
